@@ -24,7 +24,7 @@ services:
     volumes:
       - state:/data
     healthcheck:
-      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:21000/v1/health', timeout=3); urllib.request.urlopen('http://127.0.0.1:21001/', timeout=3)"]
+      test: [CMD, python, docker/runtime.py, health]
       interval: 15s
       timeout: 10s
       start_period: 180s

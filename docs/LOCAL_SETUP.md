@@ -63,7 +63,7 @@ An explicit `OMI_APPLE_TEAM_ID` overrides it. First-time Team ID input is hidden
 If something is missing, follow the displayed instructions and press Enter to
 retry; `q` exits setup. Installation starts only after all checks pass.
 
-To check without building or installing, run `./start.command --iphone-check`
+To check without building or installing, run `./iphone.command --check`
 from the repository root. You can fix issues and retry checks in this mode too.
 Xcode verifies the Apple Account's access to provisioning during signing;
 a certificate alone does not prove that the account session is still valid.

@@ -6,4 +6,4 @@ services:
       OMI_LOCAL_TRANSPORT: tailscale
   ingress:
     ports:
-      - '${OMI_TAILSCALE_IP:?Use ./docker.sh tailscale up or set the verified host Tailscale IPv4}:21000:22000'
+      - '${OMI_TAILSCALE_IP:?Run omiloc --runtime docker up with a connected host Tailscale}:21000:22000'

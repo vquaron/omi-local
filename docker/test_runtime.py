@@ -153,17 +153,45 @@ def test_legacy_ngrok_volume_can_select_tailscale_without_changing_saved_values(
     assert all(path.read_bytes() == content for path, content in before.items())
 
 
-def docker_wrapper(tmp_path, args, **overrides):
+def docker_wrapper(tmp_path, args, *, transport='local', saved=True, **overrides):
+    repo = tmp_path / 'project with spaces'
+    repo.mkdir(exist_ok=True)
+    shutil.copy2(ROOT / 'docker.sh', repo / 'docker.sh')
+    shutil.copy2(ROOT / 'omiloc', repo / 'omiloc')
+    settings = repo / '.env.docker'
+    if saved and not settings.exists():
+        settings.write_text(f'OMI_DOCKER_DEVICE=cpu\nOMI_DOCKER_TRANSPORT={transport}\nSTT_REVISION=' + 'a' * 40 + '\n')
+        settings.chmod(0o600)
+    # Native credentials must not be read by Docker, even in the same checkout.
+    (repo / '.env').write_text('native-private-fixture-do-not-read')
     fake = tmp_path / 'bin'
-    fake.mkdir()
+    fake.mkdir(exist_ok=True)
     calls = tmp_path / 'calls.jsonl'
+    calls.write_text('')
     docker = fake / 'docker'
-    docker.write_text(f'#!{sys.executable}\nimport json, os, sys\n'
-                      'if sys.argv[1:3] == ["context", "inspect"]:\n'
-                      '    print(os.environ.get("DOCKER_TEST_ENDPOINT", "unix:///fixture/docker.sock"))\n'
-                      '    sys.exit(0)\n'
-                      'with open(os.environ["DOCKER_CALLS"], "a") as f:\n'
-                      '    f.write(json.dumps({"args": sys.argv[1:], "ip": os.environ.get("OMI_TAILSCALE_IP")}) + "\\n")\n')
+    docker.write_text(f'#!{sys.executable}\n' + '''import json, os, sys
+args = sys.argv[1:]
+if args[:2] == ["context", "inspect"]:
+    print(os.environ.get("DOCKER_TEST_ENDPOINT", "unix:///fixture/docker.sock"))
+    sys.exit(0)
+if args[:2] == ["compose", "version"]:
+    print("2.40.3")
+    sys.exit(0)
+with open(os.environ["DOCKER_CALLS"], "a") as f:
+    f.write(json.dumps({"args": args, "ip": os.environ.get("OMI_TAILSCALE_IP"),
+                       "device": os.environ.get("OMI_DOCKER_DEVICE"),
+                       "gpu": os.environ.get("OMI_DOCKER_GPU_ID"),
+                       "revision": os.environ.get("STT_REVISION")}) + "\\n")
+if "ps" in args and "-q" in args and os.environ.get("DOCKER_TEST_RUNNING"):
+    print("fixture-running-container")
+if "run" in args and "download" in args:
+    if os.environ.get("DOCKER_FAIL") == "download": sys.exit(7)
+    print("Model revision: " + "b" * 40)
+if "run" in args and "stt" in args and os.environ.get("DOCKER_FAIL") == "cuda":
+    print("CUDA unavailable", file=sys.stderr)
+    sys.exit(7)
+if "up" in args and os.environ.get("DOCKER_FAIL") == "up": sys.exit(7)
+''')
     docker.chmod(0o755)
     tailscale = fake / 'tailscale'
     tailscale.write_text(f'#!{sys.executable}\nimport json, os, sys\n'
@@ -174,27 +202,28 @@ def docker_wrapper(tmp_path, args, **overrides):
                          '    print(os.environ.get("TS_IP", "100.100.12.34"))\n')
     tailscale.chmod(0o755)
     env = dict(os.environ, PATH=str(fake) + os.pathsep + os.environ['PATH'],
-               OMI_DOCKER_DEVICE='cpu', DOCKER_CALLS=str(calls), OMI_TAILSCALE_CLI=str(tailscale))
-    for name in ('OMI_LOCAL_TRANSPORT', 'OMI_TAILSCALE_IP', 'DOCKER_HOST', 'DOCKER_CONTEXT'):
+               DOCKER_CALLS=str(calls), OMI_TAILSCALE_CLI=str(tailscale))
+    for name in ('OMI_LOCAL_TRANSPORT', 'OMI_DOCKER_TRANSPORT', 'OMI_DOCKER_DEVICE', 'OMI_DOCKER_GPU_ID',
+                 'OMI_TAILSCALE_IP', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'STT_MODEL', 'STT_REVISION', 'STT_THREADS'):
         env.pop(name, None)
     env.update(overrides)
-    result = subprocess.run(['bash', str(ROOT / 'docker.sh'), *args], capture_output=True, text=True, env=env)
-    recorded = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
+    result = subprocess.run(['bash', str(repo / 'omiloc'), '--runtime', 'docker', *args],
+                            cwd=tmp_path, capture_output=True, text=True, env=env)
+    recorded = [json.loads(line) for line in calls.read_text().splitlines()]
     return result, recorded
 
 
-@pytest.mark.parametrize('args,env', [(['tailscale', 'up'], {}), (['dev'], {'OMI_LOCAL_TRANSPORT': 'tailscale'})])
-def test_wrapper_tailscale_selects_overlay_for_build_download_and_start(tmp_path, args, env):
-    result, calls = docker_wrapper(tmp_path, args, **env)
+@pytest.mark.parametrize('command', ['up', 'dev'])
+def test_wrapper_start_reuses_saved_selection_without_build_or_download(tmp_path, command):
+    result, calls = docker_wrapper(tmp_path, [command], transport='tailscale')
     assert result.returncode == 0, result.stderr
-    assert len(calls) == 4
-    assert all('compose.tailscale.yaml' in call['args'] for call in calls)
-    assert all(call['ip'] == '100.100.12.34' for call in calls)
-    assert calls[-2]['args'][-4:] == ['--profile', 'tunnel', 'stop', 'tunnel']
-    if args == ['dev']:
-        assert 'compose.dev.yaml' in calls[-1]['args'] and '--watch' in calls[-1]['args']
-    else:
-        assert calls[-1]['args'][-3:] == ['up', '-d', '--wait']
+    assert all('compose.tailscale.yaml' in c['args'] for c in calls)
+    assert all(c['ip'] == '100.100.12.34' for c in calls)
+    assert not any('build' in c['args'] or 'run' in c['args'] for c in calls)
+    startup = next(c['args'] for c in calls if 'up' in c['args'])
+    assert '--no-build' in startup and '--pull' in startup and 'never' in startup
+    assert ('--watch' in startup) == (command == 'dev')
+    assert ('--wait' in startup) == (command == 'up')
 
 
 @pytest.mark.parametrize('env', [
@@ -203,18 +232,73 @@ def test_wrapper_tailscale_selects_overlay_for_build_download_and_start(tmp_path
     {'TS_IP': '100.63.12.34'}, {'TS_IP': '100.128.12.34'}, {'TS_IP': '100.100.256.34'},
     {'DOCKER_TEST_ENDPOINT': 'ssh://remote.example'}, {'DOCKER_HOST': 'tcp://remote.example:2376'},
 ])
-def test_wrapper_tailscale_rejects_unavailable_or_foreign_ip_before_docker(tmp_path, env):
-    result, calls = docker_wrapper(tmp_path, ['tailscale', 'up'], **env)
+def test_wrapper_tailscale_rejects_unavailable_or_foreign_ip_before_start(tmp_path, env):
+    result, calls = docker_wrapper(tmp_path, ['up'], transport='tailscale', **env)
     assert result.returncode != 0
     assert calls == []
     assert '100.100.12.35' not in result.stdout + result.stderr
 
 
-@pytest.mark.parametrize('args', [['tailscale', 'down'], ['tailscale', 'status'], ['up']])
-def test_wrapper_local_and_recovery_do_not_require_tailscale(tmp_path, args):
-    result, calls = docker_wrapper(tmp_path, args, TS_STATE='Stopped')
+@pytest.mark.parametrize('args', [['down'], ['status'], ['logs'], ['logs', '-f']])
+def test_wrapper_recovery_needs_neither_tailscale_nor_gpu(tmp_path, args):
+    result, calls = docker_wrapper(tmp_path, args, transport='tailscale', TS_STATE='Stopped', OMI_DOCKER_DEVICE='cuda')
     assert result.returncode == 0, result.stderr
-    assert all('compose.tailscale.yaml' not in call['args'] for call in calls)
+    assert all('compose.tailscale.yaml' not in c['args'] and 'compose.gpu.yaml' not in c['args'] for c in calls)
+    assert not any('info' in c['args'] or 'run' in c['args'] for c in calls)
+
+
+def test_bootstrap_saves_gpu_and_immutable_model_without_starting_stack(tmp_path):
+    args = ['bootstrap', '--device', 'cuda', '--gpu', 'GPU-abcd-1234', '--transport', 'tailscale']
+    result, calls = docker_wrapper(tmp_path, args, saved=False)
+    assert result.returncode == 0, result.stderr
+    assert not any('up' in c['args'] for c in calls)
+    assert all(c['gpu'] == 'GPU-abcd-1234' and c['device'] == 'cuda' for c in calls)
+    settings = tmp_path / 'project with spaces/.env.docker'
+    first = settings.read_bytes()
+    assert b'OMI_DOCKER_DEVICE=cuda' in first and b'STT_REVISION=' + b'b' * 40 in first
+    assert settings.stat().st_mode & 0o077 == 0
+    result, _ = docker_wrapper(tmp_path, ['bootstrap'])
+    assert result.returncode == 0 and settings.read_bytes() == first
+    result, calls = docker_wrapper(tmp_path, ['up'], OMI_DOCKER_DEVICE='cpu')
+    assert result.returncode == 0, result.stderr
+    assert all(c['device'] == 'cuda' for c in calls)  # persisted choice wins over ambient env
+    assert 'native-private-fixture' not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('failure', ['download', 'cuda'])
+def test_bootstrap_failure_preserves_config_and_can_resume(tmp_path, failure):
+    result, _ = docker_wrapper(tmp_path, ['bootstrap', '--device', 'cuda'], DOCKER_FAIL=failure)
+    assert result.returncode != 0
+    settings = tmp_path / 'project with spaces/.env.docker'
+    assert 'OMI_DOCKER_DEVICE=cpu' in settings.read_text()
+    result, calls = docker_wrapper(tmp_path, ['up'])
+    assert result.returncode != 0 and not any('up' in c['args'] for c in calls)
+    result, _ = docker_wrapper(tmp_path, ['bootstrap', '--device', 'cuda'])
+    assert result.returncode == 0, result.stderr
+    assert 'OMI_DOCKER_DEVICE=cuda' in settings.read_text()
+
+
+def test_bootstrap_refuses_to_rebuild_running_stack(tmp_path):
+    result, calls = docker_wrapper(tmp_path, ['bootstrap'], DOCKER_TEST_RUNNING='1')
+    assert result.returncode != 0
+    assert not any('build' in c['args'] or 'run' in c['args'] for c in calls)
+
+
+def test_missing_bootstrap_and_noninteractive_pair_fail_without_secret_output(tmp_path):
+    result, calls = docker_wrapper(tmp_path, ['up'], saved=False)
+    assert result.returncode != 0 and 'bootstrap' in result.stderr and not calls
+    result, calls = docker_wrapper(tmp_path, ['pair'])
+    assert result.returncode != 0 and not calls
+
+
+def test_docker_config_is_never_executed(tmp_path):
+    docker_wrapper(tmp_path, ['status'])
+    repo = tmp_path / 'project with spaces'
+    (repo / '.env.docker').write_text('STT_MODEL=$(touch injected)\n')
+    result, calls = docker_wrapper(tmp_path, ['up'])
+    assert result.returncode != 0 and not calls
+    assert not (repo / 'injected').exists()
+    assert 'touch injected' not in result.stderr
 
 
 def test_tailscale_compose_render_publishes_only_paired_api_on_host_vpn():
@@ -240,6 +324,8 @@ def test_tailscale_compose_render_publishes_only_paired_api_on_host_vpn():
         assert services[name]['network_mode'] == 'service:ingress'
         assert 'ports' not in services[name]
     assert services['app']['volumes'][0]['type'] == 'volume'
+    gpu = services['stt']['deploy']['resources']['reservations']['devices'][0]
+    assert gpu['device_ids'] == ['0'] and 'count' not in gpu
 
 
 def test_runtime_pins_keep_vcs_commit_and_platform_markers():

@@ -117,15 +117,15 @@ def configure(cfg, *, rotate: bool = False, edit: bool = False) -> None:
                 return
         if (cfg.layout.state_root / 'pairing.json').is_file():
             if sys.stdout.isatty():
-                show_frame('ДЛЯ ПРИЛОЖЕНИЯ НА IPHONE', ['Адрес: ' + read_config(cfg)['url'],
-                           'Ключ: прежний, сохранённый в приложении'])
+                show_frame('IPHONE PAIRING', ['Address: ' + read_config(cfg)['url'],
+                           'App key: unchanged; already saved in the app'])
             return
         if env_path is not None and not env_path.exists():
             local_env.initialize(cfg)
             local_env.apply(cfg, local_env.read_env(env_path))
             if sys.stdout.isatty():
-                show_frame('ДЛЯ ПРИЛОЖЕНИЯ НА IPHONE', ['Адрес: ' + read_config(cfg)['url'],
-                           'Ключ: ' + local_env.read_env(env_path)['OMI_LOCAL_APP_KEY']])
+                show_frame('IPHONE PAIRING', ['Address: ' + read_config(cfg)['url'],
+                           'App key: ' + local_env.read_env(env_path)['OMI_LOCAL_APP_KEY']])
             return
         raise LocalMacError('Set OMI_LOCAL_APP_KEY in the private .env before first pairing')
     env_values = None
@@ -154,11 +154,11 @@ def configure(cfg, *, rotate: bool = False, edit: bool = False) -> None:
     if not current.exists() or edit:
         values = env_values or ngrok_env(cfg)
         existing = read_config(cfg)["url"] if current.exists() else ""
-        print('Ngrok: https://dashboard.ngrok.com — адрес в Domains, токен в Your Authtoken.')
-        print('Если аккаунта ещё нет: docs/NGROK.md')
-        url = endpoint(values.get("NGROK_URL") or input(f"HTTPS-адрес ngrok [{existing}]: ").strip() or existing)
+        print('Ngrok: https://dashboard.ngrok.com - address under Domains, token under Your Authtoken.')
+        print('For account setup, see docs/NGROK.md.')
+        url = endpoint(values.get("NGROK_URL") or input(f"Ngrok HTTPS address [{existing}]: ").strip() or existing)
         token = values.get("NGROK_AUTHTOKEN") or getpass.getpass(
-            "Authtoken ngrok (скрыт; Enter — использовать сохранённый): "
+            "Ngrok authtoken (hidden; Enter to reuse the saved token): "
         ).strip()
         if not token:
             import yaml
@@ -187,17 +187,17 @@ def configure(cfg, *, rotate: bool = False, edit: bool = False) -> None:
         private_json(current, {"url": url})
     pairing = cfg.layout.state_root / "pairing.json"
     if pairing.exists() and not rotate:
-        show_frame('ДЛЯ ПРИЛОЖЕНИЯ НА IPHONE', ['Домен: ' + read_config(cfg)['url'],
-                   'Ключ: прежний, сохранённый в приложении'])
+        show_frame('IPHONE PAIRING', ['Address: ' + read_config(cfg)['url'],
+                   'App key: unchanged; already saved in the app'])
         return
     if cli._service_record(cfg, "backend") or cli._service_record(cfg, "ngrok"):
         raise LocalMacError("Stop this local stack before replacing its pairing key")
     key = secrets.token_urlsafe(32)
     private_json(pairing, pairing_data(key))
     # Deliberate one-time terminal provisioning. Never written to files or logs.
-    show_frame('ДЛЯ ПРИЛОЖЕНИЯ НА IPHONE', ['Домен: ' + read_config(cfg)['url'], 'Ключ:  ' + key])
-    print('Введите домен и ключ в разделе «Локальный Mac» на iPhone.')
-    print('Ключ показан один раз. На Mac хранится только его проверочный хеш.')
+    show_frame('IPHONE PAIRING', ['Address: ' + read_config(cfg)['url'], 'App key: ' + key])
+    print('Enter the address and app key under Local Mac on your iPhone.')
+    print('This key is shown once. The Mac stores only its verification hash.')
 
 
 def prepare_emulator(repo: Path) -> None:
@@ -453,7 +453,7 @@ def main() -> int:
                 if args.command == "setup-check":
                     local_setup.check(cfg)
                     local_setup.require_transcription_ready(cfg)
-                    print('Готовность Mac: проверено. Изменений не внесено.')
+                    print('Native readiness verified. No changes made.')
                     return 0
                 return local_setup.run(cfg)
             except local_setup.SetupError as error:
@@ -492,7 +492,7 @@ def main() -> int:
                 os.close(read_fd)
         return 0
     except local_stt.NoSpeechDetected:
-        print('Речь не обнаружена. Аудиозапись сохранена.')
+        print('No speech detected. Recording preserved.')
         return 0
     except (ValueError, TypeError, OSError, KeyError, safety.SafetyError, subprocess.SubprocessError) as error:
         # Error text from external tools can contain credentials or account IDs.

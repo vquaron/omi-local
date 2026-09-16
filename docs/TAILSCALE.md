@@ -7,15 +7,15 @@ Tailscale. Keep the server awake and allow the backend port in your tailnet poli
 ## Native Mac
 
 Tailscale must be installed and connected. For a fresh setup, run
-`./start.command`: it selects Tailscale, generates the app key in a private `.env`,
+`./omiloc bootstrap`: it selects Tailscale, generates the app key in a private `.env`,
 and discovers this Mac's Tailscale IPv4. To prepare settings without starting:
 
 ```bash
-bash scripts/local-mac.sh init-env
+./omiloc bootstrap
 ```
 
 For an existing ngrok installation, finish recording, stop the owned stack with
-`bash scripts/local-mac.sh down`, and add this line to your existing private `.env`:
+`./omiloc down`, and add this line to your existing private `.env`:
 
 ```dotenv
 OMI_LOCAL_TRANSPORT=tailscale
@@ -55,7 +55,8 @@ provider settings retain their existing state directory when transports change.
 
 ## Docker
 
-Use `./docker.sh tailscale up` (or `tailscale dev`) with Tailscale connected on
+Use `./omiloc --runtime docker bootstrap --transport tailscale`, then
+`./omiloc --runtime docker up` (or `dev`) with Tailscale connected on
 the Docker host. Enter **IP:21000** on the phone and use the Docker volume's app
 key. Docker keeps its own recordings, models and credentials; it does not import
 the native Mac state. The library stays on host localhost port 21001.
@@ -64,8 +65,8 @@ Compose commands and the precise port bindings.
 
 ## Checks and switching back
 
-`./start.command --check` checks native prerequisites. After startup,
-`bash scripts/local-mac.sh status` reports owned services. Check and connect on
+`./omiloc doctor` checks native prerequisites. After startup,
+`./omiloc status` reports owned services. Check and connect on
 the phone verifies the key; recording received audio is a separate check.
 If connection fails, confirm Tailscale is connected on both devices, the server
 is awake, the selected port is allowed, and the app key belongs to that runtime.

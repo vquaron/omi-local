@@ -56,18 +56,18 @@ def environment() -> dict:
 def offline(command: list[str]) -> list[str]:
     sandbox = shutil.which('sandbox-exec')
     if not sandbox:
-        raise LiveInstallError('Live требует macOS sandbox-exec для работы без сети.')
+        raise LiveInstallError('Live requires macOS sandbox-exec for offline execution.')
     return [sandbox, '-p', '(version 1)(allow default)(deny network*)', *command]
 
 
 def safe_path(repo_root: Path, path: Path) -> None:
     if not path.is_relative_to(repo_root) or '..' in path.parts:
-        raise LiveInstallError('Небезопасный путь установки live.')
+        raise LiveInstallError('Unsafe live installation path.')
     for item in (path, *path.parents):
         if item == repo_root:
             break
         if item.is_symlink():
-            raise LiveInstallError('Небезопасный путь установки live.')
+            raise LiveInstallError('Unsafe live installation path.')
 
 
 def preflight(repo_root: Path) -> str:
@@ -75,15 +75,15 @@ def preflight(repo_root: Path) -> str:
     data = recipe(repo_root)
     if (platform.system() != 'Darwin' or platform.machine() != 'arm64'
             or int(platform.mac_ver()[0].split('.')[0]) < data['macos_min']):
-        raise LiveInstallError('Live требует Mac с Apple Silicon и macOS 14 или новее.')
+        raise LiveInstallError('Live requires Apple Silicon and macOS 14 or later.')
     for tool in ('xcrun', 'git', 'sandbox-exec'):
         if not shutil.which(tool):
-            raise LiveInstallError('Для live нужны Xcode, Git и sandbox-exec.')
+            raise LiveInstallError('Live requires Xcode, Git and sandbox-exec.')
     for name in BUILD_FILES:
         if not (repo_root / PACKAGE / name).is_file():
-            raise LiveInstallError('Не хватает закреплённых исходников live; восстановите копию проекта.')
+            raise LiveInstallError('Pinned live sources are missing; restore the project checkout.')
     if stt_install.digest(repo_root / FIXTURE) != data['smoke_sha256']:
-        raise LiveInstallError('Синтетический проверочный файл live отсутствует или изменён.')
+        raise LiveInstallError('The synthetic live fixture is missing or changed.')
     root = runtime_root(repo_root)
     paths = ['.install.lock', 'build.log', 'ready.json', 'build-receipt.json', 'source', BINARY]
     paths += [asset['path'] for asset in data['assets']]
@@ -93,23 +93,23 @@ def preflight(repo_root: Path) -> str:
     swift = subprocess.run(['xcrun', 'swift', '--version'], env=environment(), capture_output=True, text=True, timeout=30)
     version = re.search(r'Swift version (\d+)\.(\d+)', swift.stdout)
     if swift.returncode or not version or tuple(map(int, version.groups())) < tuple(data['swift_min']):
-        raise LiveInstallError('Live требует Xcode со Swift 6.0 или новее.')
+        raise LiveInstallError('Live requires Xcode with Swift 6.0 or later.')
     sdk = subprocess.run(['xcrun', '--sdk', 'macosx', '--show-sdk-path'],
                          env=environment(), capture_output=True, text=True, timeout=30)
     if sdk.returncode or not sdk.stdout.strip() or not Path(sdk.stdout.strip()).is_dir():
-        raise LiveInstallError('macOS SDK недоступен; завершите подготовку Xcode.')
+        raise LiveInstallError('macOS SDK unavailable; complete Xcode setup.')
     sdk_version = subprocess.run(['xcrun', '--sdk', 'macosx', '--show-sdk-version'],
                                  env=environment(), capture_output=True, text=True, timeout=30)
     if sdk_version.returncode or not re.fullmatch(r'\d+(?:\.\d+)+', sdk_version.stdout.strip()):
-        raise LiveInstallError('Не удалось определить версию macOS SDK.')
+        raise LiveInstallError('Cannot determine the macOS SDK version.')
     observer = subprocess.run(offline(['/usr/bin/true']), env=environment(), capture_output=True, timeout=10)
     if observer.returncode:
-        raise LiveInstallError('macOS sandbox для live недоступен; установка остановлена.')
+        raise LiveInstallError('macOS sandbox unavailable for live transcription; installation stopped.')
     parent = root
     while not parent.exists():
         parent = parent.parent
     if shutil.disk_usage(parent).free < 4 * 1024**3:
-        raise LiveInstallError('Для подготовки live освободите минимум 4 ГБ на диске.')
+        raise LiveInstallError('Free at least 4 GiB of disk space before preparing live transcription.')
     return swift.stdout.strip() + '; macOS SDK ' + sdk_version.stdout.strip()
 
 
@@ -154,7 +154,7 @@ def installed(repo_root: Path) -> tuple[Path, Path]:
                 raise ValueError('changed')
         return root / BINARY, root / MODEL_DIR
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        raise LiveInstallError('Live не подготовлен или изменён; выполните bash scripts/install-local-live.sh.') from None
+        raise LiveInstallError('Live is incomplete or changed; run ./omiloc bootstrap.') from None
 
 
 def prepare_source(repo_root: Path, root: Path, inputs: dict) -> Path:
@@ -166,7 +166,7 @@ def prepare_source(repo_root: Path, root: Path, inputs: dict) -> Path:
         safe_path(repo_root, target)
         content = (repo_root / PACKAGE / filename).read_bytes()
         if target.exists() and target.read_bytes() != content:
-            raise LiveInstallError('Исходники сборки live изменены; проверьте их перед повтором.')
+            raise LiveInstallError('Live build sources changed; inspect them before retrying.')
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
@@ -176,20 +176,20 @@ def prepare_source(repo_root: Path, root: Path, inputs: dict) -> Path:
 def build(repo_root: Path, inputs: dict, lock) -> dict:
     root = runtime_root(repo_root)
     source = prepare_source(repo_root, root, inputs)
-    print('Live: собираем закреплённый обработчик Parakeet…', flush=True)
+    print('Live: building the pinned Parakeet worker...', flush=True)
     with (root / 'build.log').open('w') as log:
         os.chmod(root / 'build.log', 0o600)
         result = subprocess.run(['xcrun', 'swift', 'build', '-c', 'release', '--product', 'ParakeetWorker',
                                  '--disable-automatic-resolution', '-j', '2'], cwd=source, env=environment(),
                                 stdout=log, stderr=log, timeout=1800, pass_fds=(lock.fileno(),))
     if result.returncode:
-        raise LiveInstallError('Сборка live не завершилась; проверьте .local/parakeet-live/build.log.')
+        raise LiveInstallError('Live build failed; check .local/parakeet-live/build.log.')
     output = source / '.build/release'
     products = [output / 'ParakeetWorker']
     bundle = output / 'FluidAudio_FluidAudio.bundle'
     products += sorted(path for path in bundle.rglob('*') if path.is_file())
     if len(products) < 2 or not all(path.is_file() and not path.is_symlink() for path in products):
-        raise LiveInstallError('Сборка live не создала полный набор исполняемых файлов и ресурсов.')
+        raise LiveInstallError('Live build did not produce all required executables and resources.')
     files = {}
     for product in products:
         name = 'bin/' + product.relative_to(output).as_posix()
@@ -210,7 +210,7 @@ def smoke(repo_root: Path, binary: Path, models: Path, *, timeout: float = 120) 
     """Exercise model load, Start, PCM and Stop with synthetic speech, denying network."""
     with wave.open(str(repo_root / FIXTURE)) as fixture:
         if (fixture.getnchannels(), fixture.getsampwidth(), fixture.getframerate(), fixture.getcomptype()) != (1, 2, 16000, 'NONE'):
-            raise LiveInstallError('Неверный формат синтетического файла live.')
+            raise LiveInstallError('Invalid synthetic live fixture format.')
         pcm = fixture.readframes(fixture.getnframes())
     process = subprocess.Popen(offline([str(binary), str(models)]), stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -226,16 +226,16 @@ def smoke(repo_root: Path, binary: Path, models: Path, *, timeout: float = 120) 
             while b'\n' not in buffered:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0 or not selector.select(remaining):
-                    raise LiveInstallError('Проверка live не дождалась ответа обработчика.')
+                    raise LiveInstallError('Live probe timed out waiting for the worker.')
                 chunk = os.read(process.stdout.fileno(), 8192)
                 if not chunk or len(buffered) + len(chunk) > 1024 * 1024:
-                    raise LiveInstallError('Проверка live получила неполный ответ обработчика.')
+                    raise LiveInstallError('Live probe received an incomplete worker response.')
                 buffered.extend(chunk)
             line, _, rest = buffered.partition(b'\n')
             buffered[:] = rest
             message = json.loads(line)
             if not isinstance(message, dict) or message.get('type') == 'error':
-                raise LiveInstallError('Проверка live выявила ошибку обработчика.')
+                raise LiveInstallError('Live probe reported a worker error.')
             return message
 
         def send(kind, audio=b''):
@@ -245,20 +245,20 @@ def smoke(repo_root: Path, binary: Path, models: Path, *, timeout: float = 120) 
             while view:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0 or not select.select([], [process.stdin], [], remaining)[1]:
-                    raise LiveInstallError('Live не принял проверочное аудио за отведённое время.')
+                    raise LiveInstallError('Live timed out receiving synthetic audio.')
                 try:
                     written = os.write(process.stdin.fileno(), view)
                 except BlockingIOError:
                     continue
                 if not written:
-                    raise LiveInstallError('Не удалось передать проверочное аудио в live.')
+                    raise LiveInstallError('Cannot send synthetic audio to the live worker.')
                 view = view[written:]
 
         if read().get('type') != 'model_ready':
-            raise LiveInstallError('Live не подтвердил загрузку модели.')
+            raise LiveInstallError('Live did not confirm model loading.')
         send(1)
         if read().get('type') != 'started':
-            raise LiveInstallError('Live не подтвердил начало записи.')
+            raise LiveInstallError('Live did not confirm recording startup.')
         for offset in range(0, len(pcm), 32000):
             send(2, pcm[offset:offset + 32000])
         send(3)
@@ -268,14 +268,14 @@ def smoke(repo_root: Path, binary: Path, models: Path, *, timeout: float = 120) 
             if message.get('type') == 'finished':
                 break
             if message.get('type') != 'snapshot' or not isinstance(message.get('text'), str):
-                raise LiveInstallError('Проверка live получила неверное событие.')
+                raise LiveInstallError('Live probe received an invalid event.')
             text = message['text'].lower()
         if not all(word in text for word in ('проверка', 'погода', 'текст')):
-            raise LiveInstallError('Live не распознал синтетическую проверочную речь.')
+            raise LiveInstallError('Live did not transcribe the synthetic speech fixture.')
     except (OSError, ValueError) as error:
         if isinstance(error, LiveInstallError):
             raise
-        raise LiveInstallError('Проверка live не завершила обмен с обработчиком.') from None
+        raise LiveInstallError('Live probe did not complete the worker exchange.') from None
     finally:
         selector.close()
         if process.poll() is None:
@@ -299,22 +299,22 @@ def install(repo_root: Path, *, shared_lock=None) -> None:
                 try:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
-                    raise LiveInstallError('Подготовка live уже запущена.') from None
+                    raise LiveInstallError('Live preparation is already running.') from None
                 expected = build_inputs(repo_root, toolchain)
                 try:
                     receipt = json.loads((root / 'build-receipt.json').read_text())
                 except (OSError, ValueError):
                     receipt = {}
                 reuse = receipt.get('inputs') == expected and verified_build(repo_root, receipt)
-                print('Live: ' + ('reuse' if reuse else 'build') + ' по исходникам и toolchain.', flush=True)
+                print('Live: ' + ('reuse' if reuse else 'build') + ' from sources and toolchain.', flush=True)
                 # A failed attempt must never leave a previous smoke receipt marked ready.
                 (root / 'ready.json').unlink(missing_ok=True)
                 if not reuse:
                     receipt = build(repo_root, expected, lock)
-                print('Live: проверяем и при необходимости загружаем модель (~483 МБ)…', flush=True)
+                print('Live: checking and downloading the model if needed (~483 MB)...', flush=True)
                 for asset in data['assets']:
                     stt_install.download(asset, root)
-                print('Live: проверяем распознавание синтетической речи без сети…', flush=True)
+                print('Live: verifying synthetic speech transcription offline...', flush=True)
                 smoke(repo_root, root / BINARY, root / MODEL_DIR)
                 names = {asset['path'] for asset in data['assets']} | set(receipt['files'])
                 stt_install.atomic_json(root / 'ready.json', {
@@ -323,30 +323,30 @@ def install(repo_root: Path, *, shared_lock=None) -> None:
                               for name in sorted(names)},
                 })
                 installed(repo_root)
-                print('Live подготовлен; работающие сервисы не изменены.', flush=True)
+                print('Live prepared; running services unchanged.', flush=True)
     except transcription_lock.TranscriptionLockBusy as error:
         raise LiveInstallError(str(error)) from None
     except transcription_lock.TranscriptionLockError:
-        raise LiveInstallError('Не удалось безопасно открыть общую блокировку распознавания.') from None
+        raise LiveInstallError('Cannot safely open the shared transcription lock.') from None
 
 
 def main() -> int:
     os.umask(0o077)
-    parser = argparse.ArgumentParser(description='Подготовить локальное live-распознавание Parakeet.')
-    parser.add_argument('--check', action='store_true', help='проверить установленный обработчик без изменений')
+    parser = argparse.ArgumentParser(description='Prepare local Parakeet live transcription.')
+    parser.add_argument('--check', action='store_true', help='Check the installed worker without making changes.')
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[3]
     try:
         if args.check:
             installed(repo_root)
-            print('Live: файлы и проверка распознавания подтверждены.')
+            print('Live: files and transcription probe verified.')
         else:
             install(repo_root)
         return 0
     except (LiveInstallError, transcription_lock.TranscriptionLockError,
             stt_install.InstallError, OSError, subprocess.SubprocessError) as error:
         print(str(error) if isinstance(error, (LiveInstallError, stt_install.InstallError)) else
-              'Подготовка live остановлена. Проверьте среду и повторите команду.')
+              'Live preparation stopped. Check the environment and retry.')
         return 1
 
 

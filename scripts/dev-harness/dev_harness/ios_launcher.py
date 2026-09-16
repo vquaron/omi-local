@@ -26,7 +26,7 @@ def session_lock(path=None):
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
-            raise LocalEnvError('Нельзя проверить блокировку запуска iPhone.')
+            raise LocalEnvError('Cannot verify the iPhone launch lock.')
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as error:
@@ -43,9 +43,9 @@ def _capture(args):
     try:
         result = subprocess.run(args, capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.TimeoutExpired) as error:
-        raise LocalEnvError('Не удалось проверить запущенные процессы; повторный запуск отменён.') from error
+        raise LocalEnvError('Cannot inspect running processes; duplicate startup refused.') from error
     if result.returncode:
-        raise LocalEnvError('Не удалось проверить запущенные процессы; повторный запуск отменён.')
+        raise LocalEnvError('Cannot inspect running processes; duplicate startup refused.')
     return result.stdout
 
 
@@ -105,7 +105,7 @@ def active_sessions():
             raise
         directories = [value[1:] for value in cwd.splitlines() if value.startswith('n')]
         if not directories:
-            raise LocalEnvError('Не удалось определить каталог работающего процесса; запуск отменён.')
+            raise LocalEnvError('Cannot identify the running process checkout; launch cancelled.')
         if any(_omi_checkout(directory) for directory in directories):
             found.append(pid)
     return found
@@ -116,7 +116,7 @@ def command(root, mode, *, check=False, build_only=False):
         args = [sys.executable, '-m', 'dev_harness.ios_debug']
         return args + (['--check'] if check else ['--build-only'] if build_only else [])
     if build_only:
-        raise LocalEnvError('--build-only доступен только для Debug.')
+        raise LocalEnvError('--build-only is supported only in Debug mode.')
     return ['bash', str(root / 'app/setup.sh'), 'ios', 'personal'] + (['--check'] if check else [])
 
 
@@ -125,20 +125,20 @@ def launch(root, mode, *, check=False, build_only=False, lock_path=None):
         with session_lock(lock_path) as fd:
             existing = active_sessions()
             if existing:
-                print('Сеанс или сборка Omi для iPhone уже работает. Второй запуск не выполнен.')
+                print('An Omi iPhone session or build is already running. Duplicate launch skipped.')
                 return 0
             if mode == 'status':
-                print('Активных сеансов или сборок Omi для iPhone на Mac не найдено.')
+                print('No active Omi iPhone sessions or builds found on this Mac.')
                 return 0
             if not (check or build_only) and not sys.stdin.isatty():
-                raise LocalEnvError('Запустите iphone.command в своём Terminal для интерактивного сеанса.')
+                raise LocalEnvError('Run iphone.command in your own terminal for an interactive session.')
             args = command(root, mode, check=check, build_only=build_only)
-            print('Omi Local Dev: Debug с hot reload.' if mode == 'debug'
-                  else 'Omi Local: Profile для обычного запуска с иконки; локальный сервер Mac.', flush=True)
+            print('Omi Local Dev: Debug with hot reload.' if mode == 'debug'
+                  else 'Omi Local: Profile for everyday launches from the app icon; paired local server.', flush=True)
             # The direct child retains the lock even if this wrapper exits first.
             return subprocess.run(args, cwd=root, pass_fds=(fd,)).returncode
     except SessionBusy:
-        print('Запуск Omi для iPhone уже занят другим окном. Второй запуск не выполнен.')
+        print('Another terminal owns the iPhone launcher. Duplicate launch skipped.')
         return 0
 
 
@@ -154,26 +154,26 @@ def main(argv=None):
         if args.check or args.build_only:
             mode = 'debug'
         elif not sys.stdin.isatty():
-            parser.error('Укажите debug, profile или status.')
+            parser.error('Choose debug, profile or status.')
         else:
-            print('1 — Omi Local Dev: Debug и hot reload\n2 — Omi Local: Profile для обычного запуска\n3 — Статус')
+            print('1 - Omi Local Dev: Debug with hot reload\n2 - Omi Local: Profile for everyday use\n3 - Status')
             try:
-                choice = input('Выберите режим [1]: ').strip() or '1'
+                choice = input('Choose a mode [1]: ').strip() or '1'
             except (EOFError, KeyboardInterrupt):
-                print('\nЗапуск отменён.')
+                print('\nLaunch cancelled.')
                 return 0
             mode = {'1': 'debug', '2': 'profile', '3': 'status'}.get(choice)
             if mode is None:
-                parser.error('Выберите 1, 2 или 3.')
+                parser.error('Choose 1, 2 or 3.')
     mode = {'dev': 'debug', 'prod': 'profile'}.get(mode, mode)
     if mode == 'profile' and args.build_only:
-        parser.error('--build-only доступен только для Debug.')
+        parser.error('--build-only is supported only in Debug mode.')
     if mode == 'status' and (args.check or args.build_only):
-        parser.error('Для status не нужны --check или --build-only.')
+        parser.error('status does not accept --check or --build-only.')
     try:
         return launch(Path.cwd(), mode, check=args.check, build_only=args.build_only)
     except (LocalEnvError, OSError) as error:
-        print(str(error) if isinstance(error, LocalEnvError) else 'Не удалось проверить запуск iPhone.')
+        print(str(error) if isinstance(error, LocalEnvError) else 'Unable to verify iPhone launch readiness.')
         return 1
     except KeyboardInterrupt:
         return 130

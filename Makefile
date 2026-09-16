@@ -54,15 +54,28 @@ test-library:
 	env -u PROVIDER_MODE PYTHONDONTWRITEBYTECODE=1 "$${PYTHON}" -m pytest -q -p no:cacheprovider scripts/dev-harness/tests/test_local_library.py
 	node --test web-local/*.test.mjs
 
-.PHONY: docker-up docker-dev docker-down test-docker
+.PHONY: docker-bootstrap docker-up docker-dev docker-down docker-status docker-logs docker-doctor test-docker
+
+docker-bootstrap:
+	./omiloc --runtime docker bootstrap
+
 docker-up:
-	./docker.sh up
+	./omiloc --runtime docker up
 
 docker-dev:
-	./docker.sh dev
+	./omiloc --runtime docker dev
 
 docker-down:
-	./docker.sh down
+	./omiloc --runtime docker down
+
+docker-status:
+	./omiloc --runtime docker status
+
+docker-logs:
+	./omiloc --runtime docker logs
+
+docker-doctor:
+	./omiloc --runtime docker doctor
 
 test-docker:
 	env -u PROVIDER_MODE PYTHONDONTWRITEBYTECODE=1 "$${PYTHON}" -m pytest -q -p no:cacheprovider docker/test_runtime.py

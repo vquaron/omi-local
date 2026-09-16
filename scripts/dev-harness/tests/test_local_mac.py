@@ -597,5 +597,5 @@ def test_manual_no_speech_is_successful_and_content_free(monkeypatch, capsys):
     monkeypatch.setattr(local_stt, 'transcribe', no_speech)
     assert local_mac.main() == 0
     output = capsys.readouterr()
-    assert output.out.strip() == 'Речь не обнаружена. Аудиозапись сохранена.'
+    assert output.out.strip() == 'No speech detected. Recording preserved.'
     assert not output.err

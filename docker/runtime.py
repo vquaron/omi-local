@@ -9,11 +9,13 @@ import signal
 import sys
 import time
 import threading
+import urllib.request
 
 from dev_harness import cli, config, local_env, local_library, local_mac, local_stt_services, local_stt_watch
 
 ROOT = Path('/opt/omiloc')
 DATA = Path('/data')
+READY = Path('/tmp/omiloc-ready')
 
 
 def write_once(path, value):
@@ -83,6 +85,30 @@ def configure():
     print('Saved. Restart the Docker stack before starting the tunnel.')
 
 
+def health():
+    if not READY.is_file():
+        raise ValueError('Docker runtime is not ready yet.')
+    cfg = config.load_config(ROOT, create_layout=False)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    for url in (cfg.backend_url + '/v1/health', local_library.url(cfg)):
+        with opener.open(url, timeout=3) as response:
+            if response.status != 200:
+                raise ValueError('A Docker service is unavailable.')
+    from dev_harness.local_setup import require_transcription_ready
+    require_transcription_ready(cfg)
+
+
+def pair():
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        raise ValueError('Run pair in your own interactive terminal; keys must not enter logs.')
+    values = local_env.read_env(DATA / 'connection.env')
+    address = os.environ.get('OMI_PAIR_ADDRESS') or values.get('OMI_NGROK_URL')
+    if not address or address == 'https://local.invalid':
+        raise ValueError('Configure the ngrok connection before pairing.')
+    print('Address: ' + address)
+    print('App key: ' + values['OMI_LOCAL_APP_KEY'])
+
+
 def supervisor_running(pid, proc_root=Path('/proc')):
     # kill(pid, 0) also succeeds for exited, unreaped children on Linux.
     try:
@@ -117,6 +143,7 @@ def stop_owned(cfg):
 
 def main():
     os.umask(0o077)
+    READY.unlink(missing_ok=True)
     os.chdir(ROOT)
     DATA.mkdir(exist_ok=True)
     # The lock rejects accidental duplicate runtimes on the same named volume.
@@ -131,6 +158,7 @@ def main():
         def stop(_sig, _frame):
             nonlocal stopped
             stopped = True
+            READY.unlink(missing_ok=True)
 
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
@@ -164,6 +192,9 @@ def main():
                     if time.monotonic() > deadline:
                         raise RuntimeError('STT startup failed; check model cache and stt container') from None
                     time.sleep(2)
+            if stopped:
+                return
+            READY.touch(mode=0o600)
             print('Docker runtime ready', flush=True)
             while not stopped:
                 # Fail visibly so Compose can restart the owned runtime after a child exits.
@@ -173,15 +204,26 @@ def main():
                 time.sleep(1)
         finally:
             # Signal each validated supervisor once; Firebase exports before exit.
+            READY.unlink(missing_ok=True)
             stop_owned(cfg)
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] == ['configure']:
-        configure()
-    else:
-        try:
+    try:
+        if sys.argv[1:] == ['configure']:
+            configure()
+        elif sys.argv[1:] == ['pair']:
+            pair()
+        elif sys.argv[1:] == ['health']:
+            health()
+        elif len(sys.argv) == 3 and sys.argv[1] == 'inference':
+            from dev_harness.runtime_probe import docker_inference
+            docker_inference(ROOT, sys.argv[2])
+        elif len(sys.argv) == 1:
             main()
-        except Exception as error:
-            print('Docker runtime failed: ' + type(error).__name__, file=sys.stderr)
-            raise SystemExit(1)
+        else:
+            raise ValueError('Unknown Docker runtime operation.')
+    except Exception as error:
+        print('Docker runtime operation failed: ' + type(error).__name__ +
+              '. Inspect private service logs and run doctor.', file=sys.stderr)
+        raise SystemExit(1)

@@ -1,6 +1,7 @@
 """Single-model, serialized OpenAI timed-WAV API; no request-content logging."""
 import io
 import os
+from pathlib import Path
 import sys
 import threading
 import wave
@@ -92,8 +93,8 @@ def create_app(loader=load_model):
 
 if __name__ == '__main__':
     if sys.argv[1:] == ['download']:
-        model_path(download=True)
-        print('Model cache prepared')
+        resolved = model_path(download=True)
+        print('Model revision: ' + Path(resolved).name)
     else:
         import uvicorn
         uvicorn.run(create_app(), host='127.0.0.1', port=10301, access_log=False, log_level='warning')

@@ -79,7 +79,7 @@ def install(root, *, shared_lock=None, lock_path=None):
     except transcription_lock.TranscriptionLockBusy as error:
         raise kit.WhisperKitError(str(error)) from None
     except transcription_lock.TranscriptionLockError:
-        raise kit.WhisperKitError('Не удалось безопасно открыть общую блокировку распознавания.') from None
+        raise kit.WhisperKitError('Cannot safely open the shared transcription lock.') from None
 
 
 def _install_locked(root, swift, data):
@@ -95,7 +95,7 @@ def _install_locked(root, swift, data):
         reuse = (receipt.get('inputs') == expected and binary.is_file()
                  and receipt.get('executable_sha256') == stt_install.digest(binary))
         if not reuse:
-            print('WhisperKit: сборка локального обработчика…', flush=True)
+            print('WhisperKit: building the local worker...', flush=True)
             with (root / 'build.log').open('w') as log:
                 result = subprocess.run(['xcrun', 'swift', 'build', '-c', 'release', '--product', 'whisperkit-cli',
                                          '--disable-automatic-resolution', '-j', '2'],
@@ -105,10 +105,10 @@ def _install_locked(root, swift, data):
             binary.parent.mkdir(exist_ok=True)
             shutil.copy2(root / 'source/.build/release/whisperkit-cli', binary)
             stt_install.atomic_json(receipt_path, {'inputs': expected, 'executable_sha256': stt_install.digest(binary)})
-        print('WhisperKit: проверка и загрузка модели (~630 МБ)…', flush=True)
+        print('WhisperKit: checking and downloading the model (~630 MB)...', flush=True)
         for asset in data['assets']:
             stt_install.download(asset, root)
-        print('WhisperKit: проверка речи и таймкодов с запрещённой сетью…', flush=True)
+        print('WhisperKit: verifying speech and timestamps with networking disabled...', flush=True)
         fixture = kit.SOURCE / 'fixtures/speech-check.wav'
         if stt_install.digest(fixture) != data['smoke_sha256']:
             raise kit.WhisperKitError('Synthetic speech fixture changed')
@@ -126,7 +126,7 @@ def _install_locked(root, swift, data):
             'offline_speech_check': 'passed', 'swift': swift,
         })
         kit.installed(root)
-        print('WhisperKit подготовлен; активный движок не изменён.', flush=True)
+        print('WhisperKit prepared; active engine unchanged.', flush=True)
 
 
 def main():
@@ -135,23 +135,23 @@ def main():
     default_root = kit.SOURCE.parents[1] / '.local/whisperkit'
     parser.add_argument('--root', type=Path, default=default_root)
     parser.add_argument('--lock-path', type=Path,
-                        help='путь общей блокировки; обязателен для нестандартного --root')
+                        help='Shared lock path; required with a custom --root.')
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     try:
         if args.check:
             kit.installed(args.root)
-            print('WhisperKit: файлы проверены.')
+            print('WhisperKit: files verified.')
         else:
             root = args.root.resolve()
             if root != default_root.resolve() and args.lock_path is None:
-                raise kit.WhisperKitError('Для нестандартного --root укажите --lock-path общей блокировки.')
+                raise kit.WhisperKitError('Specify the shared --lock-path with a custom --root.')
             install(root, lock_path=args.lock_path.resolve() if args.lock_path else None)
         return 0
     except (kit.WhisperKitError, transcription_lock.TranscriptionLockError,
             stt_install.InstallError, OSError, subprocess.SubprocessError) as error:
         print(str(error) if isinstance(error, (kit.WhisperKitError, stt_install.InstallError)) else
-              'Подготовка WhisperKit остановлена. Повторите команду после проверки среды.')
+              'WhisperKit preparation stopped. Check the environment and retry.')
         return 1
 
 

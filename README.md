@@ -56,10 +56,12 @@ provisioning and Developer Mode requirements.
 ```bash
 git clone https://github.com/vquaron/omi-local.git omiloc
 cd omiloc
-./start.command
+./omiloc bootstrap
+./omiloc up
 ```
 
-You can also open `start.command` in Finder. The launcher:
+You can also open `start.command` in Finder. The launcher runs the same
+`bootstrap`, `up`, and `open` commands:
 
 1. Installs missing Mac dependencies and checks prerequisites.
 2. Prepares and verifies WhisperKit for final transcription and Parakeet for live
@@ -115,15 +117,17 @@ From a new checkout of `main`:
 ```bash
 git clone --branch main https://github.com/vquaron/omi-local.git omiloc
 cd omiloc
-./docker.sh up
+./omiloc --runtime docker bootstrap --device cpu --transport local
+./omiloc --runtime docker up
 ```
 
-If you already have this repository, run `./docker.sh up` from its root. Open the
+If you already have this repository, run the Docker bootstrap and startup commands
+from its root. Open the
 [audio library](http://127.0.0.1:21001/). The first launch builds the images and
 caches the default `faster-whisper-small` model; later launches reuse them.
 `up` waits for readiness and leaves the services running in the background.
 
-To launch directly with Docker Compose, without `docker.sh`, run these commands
+To launch directly with Docker Compose, without the CLI, run these commands
 from the repository root (CPU on Mac or Linux):
 
 ```bash
@@ -138,27 +142,29 @@ hot reload, logs, and shutdown commands, see
 
 | Task | Command |
 | --- | --- |
-| Start or rebuild after updating the code | `./docker.sh up` |
-| Develop with Python reload and automatic web refresh | `./docker.sh dev` |
-| Check container status | `./docker.sh status` |
-| Follow service logs | `./docker.sh logs` |
-| Stop and keep recordings, settings, and models | `./docker.sh down` |
+| Prepare or rebuild after updating the code | `./omiloc --runtime docker bootstrap` |
+| Develop with Python reload and automatic web refresh | `./omiloc --runtime docker dev` |
+| Check container status | `./omiloc --runtime docker status` |
+| Follow service logs | `./omiloc --runtime docker logs -f` |
+| Stop and keep recordings, settings, and models | `./omiloc --runtime docker down` |
 
 Run `dev` in your own terminal and finish active recordings before backend edits.
-When changing between `up` and `dev`, stop the stack with `./docker.sh down` first.
+When changing between `up` and `dev`, stop the stack with `./omiloc --runtime docker down` first.
 
 Docker uses CPU on Mac. For Linux/WSL2 with a configured NVIDIA GPU runtime:
 
 ```bash
-OMI_DOCKER_DEVICE=cuda ./docker.sh up
+./omiloc --runtime docker bootstrap --device cuda --gpu 0 --transport tailscale
+./omiloc --runtime docker up
 ```
 
-The default `auto` mode selects CUDA when Docker reports the NVIDIA runtime;
-otherwise it selects CPU. NVIDIA hardware execution remains unverified.
+Docker bootstrap requires an explicit `cpu` or `cuda` choice. CUDA execution
+requires the NVIDIA prerequisites described in the Docker guide and is verified
+inside the selected container; there is no silent CPU fallback.
 WhisperKit/Core ML uses the [native Mac stack](#quick-start).
 
 The library starts without ngrok. To receive recordings over Tailscale, use
-`./docker.sh tailscale up` and pair to **IP:21000**. See
+`./omiloc --runtime docker bootstrap --transport tailscale` and pair to **IP:21000**. See
 [Docker pairing](docs/DOCKER.md#iphone-and-tailscale); ngrok remains optional. Docker has its own
 app key and data volumes; native Mac recordings and settings are not imported.
 For upgrades, GPU prerequisites, model selection, and troubleshooting, see the
@@ -253,13 +259,13 @@ Run these commands from the project directory:
 
 | Problem | First step |
 | --- | --- |
-| Docker services are unavailable | `./docker.sh status`, then `./docker.sh logs` |
-| Mac services or transcription are unavailable | `./start.command --check` |
-| iPhone tools, signing, or device readiness fail | `./start.command --iphone-check` |
+| Docker services are unavailable | `./omiloc --runtime docker status`, then `./omiloc --runtime docker logs` |
+| Mac services or transcription are unavailable | `./omiloc doctor`, then `./omiloc logs` |
+| iPhone tools, signing, or device readiness fail | `./iphone.command --check` |
 | `omiloc` is not found | Run `./omiloc --install`, then open a new terminal |
 | Setup was interrupted | Run `./start.command` again to resume preparation |
 | The phone cannot connect | Follow [Connection diagnostics](docs/CONNECTION_DIAGNOSTICS.md) |
-| You need to stop the Mac services | `bash scripts/local-mac.sh down` |
+| You need to stop the Mac services | `./omiloc down` |
 
 Setup output is saved in `.local/install.log`. Keep recordings, logs, app keys,
 ngrok credentials, and signing files private.

@@ -22,26 +22,26 @@ def install_plan(repo, *, home=None):
     source = repo.resolve() / 'omiloc'
     target = home / '.local/bin/omiloc'
     if not source.is_file() or not os.access(source, os.X_OK):
-        raise LauncherError('Не найден исполняемый файл omiloc в проекте.')
+        raise LauncherError('The executable omiloc entrypoint is missing from this checkout.')
     if os.path.lexists(target) and not (target.is_symlink() and target.resolve() == source):
-        raise LauncherError('Имя ~/.local/bin/omiloc уже занято. Существующий файл сохранён.')
+        raise LauncherError('The path ~/.local/bin/omiloc is already occupied. Existing file preserved.')
     existing = shutil.which('omiloc')
     if existing and Path(existing).resolve() != source:
-        raise LauncherError('В PATH уже есть другая команда omiloc. Она сохранена.')
+        raise LauncherError('Another omiloc command is already on PATH. Existing command preserved.')
     shell = Path(os.environ.get('SHELL', '/bin/zsh')).name
     profile = home / ('.bash_profile' if shell == 'bash' else '.zprofile')
     on_path = str(target.parent) in os.environ.get('PATH', '').split(os.pathsep)
     line = 'export PATH="$HOME/.local/bin:$PATH"'
     profile_text = profile.read_text() if profile.exists() else ''
     if not on_path and shell not in {'bash', 'zsh'}:
-        raise LauncherError('Добавьте ~/.local/bin в PATH вашей оболочки и повторите установку.')
+        raise LauncherError('Add ~/.local/bin to your shell PATH and retry installation.')
     # Check both destinations before changing either of them.
     for destination in (target.parent, profile if profile.exists() else home):
         parent = destination
         while not parent.exists():
             parent = parent.parent
         if not os.access(parent, os.W_OK):
-            raise LauncherError('Нет доступа для установки команды в домашнюю папку.')
+            raise LauncherError('Cannot install the command in the user home directory.')
     return source, target, profile, line if not on_path and line not in profile_text.splitlines() else None
 
 
@@ -62,27 +62,28 @@ def open_library(cfg):
         local_library.start(cfg)
     address = local_library.url(cfg)
     print('omiloc · ' + address)
-    if not webbrowser.open(address):
-        print('Откройте этот адрес в браузере.')
+    if sys.stdout.isatty() and not os.environ.get('SSH_CONNECTION') and not os.environ.get('SSH_TTY'):
+        if not webbrowser.open(address):
+            print('Open this address in your browser.')
     return 0
 
 
 def main():
-    parser = argparse.ArgumentParser(prog='omiloc', description='Открыть локальную аудиотеку в браузере.')
-    parser.add_argument('--install', action='store_true', help='установить команду для текущего пользователя')
+    parser = argparse.ArgumentParser(prog='omiloc', description='Open the local audio library in a browser.')
+    parser.add_argument('--install', action='store_true', help='Install the command for the current user.')
     args = parser.parse_args()
     try:
         repo = Path.cwd()
         if args.install:
             install(repo)
-            print('Команда omiloc установлена. При необходимости откройте новый Terminal.')
+            print('omiloc installed. Open a new terminal if needed.')
         else:
             cfg = config.load_config(repo, create_layout=False)
             return open_library(cfg)
         return 0
     except (ValueError, OSError, RuntimeError, safety.SafetyError, subprocess.SubprocessError) as error:
         message = str(error) if isinstance(error, LauncherError) else (
-            'Не удалось открыть аудиотеку. Из папки проекта выполните: ./start.command --check')
+            'Unable to open the library. Run from the checkout: ./omiloc doctor')
         print(message, file=sys.stderr)
         return 1
 
