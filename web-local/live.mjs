@@ -32,7 +32,7 @@ export function mountLiveMonitor(root) {
   const note = element('p', 'monitor-note', 'Начните запись на CV1 или с микрофона iPhone. Текст появится здесь автоматически.');
   const cards = element('div', 'monitor-cards');
   const fields = {};
-  for (const [id, label] of [['audio', 'Источник звука'], ['live', 'Live STT'], ['final', 'После остановки']]) {
+  for (const [id, label] of [['audio', 'Источник звука'], ['live', 'Live STT'], ['diarization', 'Диаризация · во время записи'], ['final', 'После остановки']]) {
     const card = element('div', 'monitor-card');
     const value = element('strong', '', '—');
     const detail = element('span', '', 'Проверяем состояние…');
@@ -64,6 +64,17 @@ export function mountLiveMonitor(root) {
     fields.audio.detail.textContent = sessions.length ? `${formatTime(data.capture.audio_seconds || 0)} получено · ${data.capture.frames_received || 0} кадров` : activity.label;
     fields.live.value.textContent = live.provider || 'Live STT';
     fields.live.detail.textContent = `${states[live.state] || 'Неизвестно'} · отправлено обновлений: ${live.updates || 0}`;
+    const diarization = data.diarization || {};
+    const diarizationStates = {disabled: 'Выключена', ready: 'Сервис готов', busy: 'Сервис занят',
+      pending: 'Включена · ожидаем метки', labeled: 'Метки получены', degraded: 'Ошибка диаризации',
+      failed: 'Поток завершился с ошибкой', unavailable: 'Сервис недоступен', unknown: 'Неизвестно'};
+    fields.diarization.value.textContent = diarizationStates[diarization.state] || 'Неизвестно';
+    fields.diarization.detail.textContent = diarization.state === 'labeled'
+      ? `Размечено фрагментов в текущем тексте: ${diarization.labeled_segments || 0}`
+      : diarization.state === 'degraded' ? 'Метки сняты. Состояние текста и аудио показано отдельно.'
+      : ['ready', 'busy', 'pending'].includes(diarization.state) ? 'Результат текущей записи ещё не подтверждён.'
+      : diarization.state === 'disabled' ? 'Метки спикеров в потоке не создаются.'
+      : 'Нет подтверждения работы диаризации.';
     fields.final.value.textContent = final.provider || 'Финальный STT';
     fields.final.detail.textContent = `${states[final.state] || 'Недоступен'}${final.jobs?.pending ? ` · в очереди: ${final.jobs.pending}` : ''}${final.jobs?.failed ? ` · ошибок: ${final.jobs.failed}` : ''}`;
     const draft = JSON.stringify(sessions.map(({preview_id, source, text, text_truncated}) => ({preview_id, source, text, text_truncated})));

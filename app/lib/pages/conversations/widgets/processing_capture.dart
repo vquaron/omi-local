@@ -129,7 +129,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   if (Env.isOfflineRuntime)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: LocalOmiButtonFeedback(action: provider.localOmiButtonFeedback),
+                      child: LocalOmiButtonFeedback(
+                          action: provider.localOmiButtonFeedback, event: provider.lastOmiButtonEvent),
                     ),
                   _buildUnifiedRecordingUI(provider, header),
                 ],

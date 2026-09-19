@@ -13,17 +13,27 @@ String localCaptureStatusText(BuildContext context, LocalCapturePhase phase) => 
       LocalCapturePhase.failed => context.l10n.somethingWentWrong,
     };
 
-/// Brief result supplied by the controller after a button action completes.
+/// Receipt of a BLE gesture and its command result are separate evidence.
 class LocalOmiButtonFeedback extends StatelessWidget {
-  const LocalOmiButtonFeedback({super.key, required this.action});
+  const LocalOmiButtonFeedback({super.key, required this.action, this.event});
 
   final LocalOmiButtonAction? action;
+  final OmiButtonEvent? event;
 
   @override
   Widget build(BuildContext context) {
     final action = this.action;
-    if (action == null) return const SizedBox.shrink();
+    final eventText = switch (event) {
+      OmiButtonEvent.singleTap => context.l10n.omiButtonSingleTap,
+      OmiButtonEvent.doubleTap => context.l10n.doubleTap,
+      OmiButtonEvent.longPress => context.l10n.omiButtonLongPress,
+      OmiButtonEvent.pressed => context.l10n.omiButtonPressed,
+      OmiButtonEvent.released => context.l10n.omiButtonReleased,
+      null => null,
+    };
+    if (action == null && eventText == null) return const SizedBox.shrink();
     final text = switch (action) {
+      null => null,
       LocalOmiButtonAction.started => context.l10n.recordingStartedSuccessfully,
       LocalOmiButtonAction.stopped => context.l10n.localCaptureIdle,
       LocalOmiButtonAction.paused => context.l10n.recordingPaused,
@@ -35,15 +45,41 @@ class LocalOmiButtonFeedback extends StatelessWidget {
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        key: const Key('local_omi_button_feedback'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(action == LocalOmiButtonAction.failed ? Icons.error_outline : Icons.check_circle_outline,
-              size: 18, color: Colors.white70),
-          const SizedBox(width: 8),
-          Expanded(
-              child: Text('${context.l10n.omiAppName} · $text',
-                  style: const TextStyle(fontSize: 13, color: Colors.white70))),
+          if (eventText != null)
+            Row(
+              key: const Key('local_omi_button_receipt'),
+              children: [
+                const Icon(Icons.touch_app_outlined, size: 18, color: Colors.white70),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${context.l10n.omiAppName} · $eventText',
+                    style: const TextStyle(fontSize: 13, color: Colors.white70),
+                  ),
+                ),
+              ],
+            ),
+          if (text != null)
+            Row(
+              key: const Key('local_omi_button_feedback'),
+              children: [
+                Icon(
+                  action == LocalOmiButtonAction.failed ? Icons.error_outline : Icons.check_circle_outline,
+                  size: 18,
+                  color: Colors.white70,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${context.l10n.omiAppName} · $text',
+                    style: const TextStyle(fontSize: 13, color: Colors.white70),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

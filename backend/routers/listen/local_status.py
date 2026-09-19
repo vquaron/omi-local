@@ -31,7 +31,8 @@ def require_local_preview(request: Request) -> None:
         raise HTTPException(status_code=404, detail='Local preview is unavailable')
 
 
-async def _worker_state(url: str) -> str:
+async def _worker_status(url: str) -> dict:
+    unavailable = {'state': 'unavailable', 'diarization': {'state': 'unavailable', 'labeled_segments': 0}}
     health_url = urlsplit(url)._replace(scheme='http', path='/health').geturl()
     try:
         # Bound semaphore wait, connect, and the entire response, including slow
@@ -42,22 +43,35 @@ async def _worker_state(url: str) -> str:
                     'GET', health_url, follow_redirects=False, timeout=0.8
                 ) as response:
                     if response.status_code != 200:
-                        return 'unavailable'
+                        return unavailable
                     body = bytearray()
                     async for chunk in response.aiter_bytes(chunk_size=4097):
                         body.extend(chunk)
                         if len(body) > 4096:
-                            return 'unavailable'
+                            return unavailable
                     health = json.loads(body)
         if not isinstance(health, dict) or health.get('ready') is not True:
-            return 'unavailable'
+            return unavailable
         if health.get('enabled') is False:
-            return 'disabled'
-        if type(health.get('active')) is not bool:
-            return 'unavailable'
-        return 'busy' if health['active'] else 'ready'
+            return {'state': 'disabled', 'diarization': {'state': 'disabled', 'labeled_segments': 0}}
+        if type(health.get('active')) is not bool or type(health.get('busy', False)) is not bool:
+            return unavailable
+        busy = health['active'] or health.get('busy', False)
+        diarization = health.get('diarization')
+        if isinstance(diarization, dict) and health.get('relay') is True:
+            state = diarization.get('state')
+            if state not in {'disabled', 'ready', 'busy', 'unavailable', 'unknown'}:
+                state = 'unknown'
+        elif diarization is True:
+            state = 'busy' if busy else 'ready'
+        elif diarization is False:
+            state = 'disabled'
+        else:
+            state = 'unknown'
+        return {'state': 'busy' if busy else 'ready',
+                'diarization': {'state': state, 'labeled_segments': 0}}
     except (TimeoutError, httpx.HTTPError, OSError, ValueError, OfflineEgressBlocked):
-        return 'unavailable'
+        return unavailable
 
 
 async def snapshot(uid: str) -> dict:
@@ -76,6 +90,7 @@ async def snapshot(uid: str) -> dict:
         capture_state = 'decode_error'
     previews = [session.local_preview for session in sessions if session.local_preview is not None]
     updates = sum(preview.updates for preview in previews)
+    diarization = {'state': 'unknown', 'labeled_segments': 0}
     if previews and all(getattr(preview, 'disabled', False) for preview in previews):
         live_state = 'disabled'
     elif any(preview.failed for preview in previews):
@@ -88,9 +103,21 @@ async def snapshot(uid: str) -> dict:
         except ValueError:
             live_state = 'unavailable'
         else:
-            live_state = await _worker_state(url) if url else 'disabled'
+            worker = await _worker_status(url) if url else {
+                'state': 'disabled', 'diarization': {'state': 'disabled', 'labeled_segments': 0}}
+            live_state, diarization = worker['state'], worker['diarization']
+    if previews:
+        evidence = [getattr(preview, 'diarization_status', {'state': 'unknown', 'labeled_segments': 0})
+                    for preview in previews]
+        # A failing or waiting session must not be hidden by another one's labels.
+        order = ('failed', 'degraded', 'pending', 'unknown', 'labeled', 'disabled')
+        diarization = {'state': next(state for state in order if any(item['state'] == state for item in evidence)),
+                       'labeled_segments': sum(item['labeled_segments'] for item in evidence)}
+    elif live_state == 'unavailable':
+        diarization = {'state': 'unavailable', 'labeled_segments': 0}
     return {
         'backend': 'ready',
+        'diarization': diarization,
         'capture': {
             'state': capture_state,
             'audio_seconds': round(pcm_bytes / (OUTPUT_SAMPLE_RATE * OUTPUT_CHANNELS * OUTPUT_SAMPLE_WIDTH_BYTES), 3),

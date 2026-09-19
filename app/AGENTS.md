@@ -40,7 +40,10 @@ Local capture labels use `localCapturePhase`, never BLE connection alone. Live O
 audio evidence expires after 3 seconds without payload; this changes only the label,
 not the recording session. Keep it separate from Mac receipt/storage/STT status.
 The collapsed runtime header combines the input source and Mac connection in one row.
-Button feedback shows the completed action for four seconds, never raw down/up events.
+Its expanded card shows live speaker-label evidence independently of ASR; a missing
+`diarization` field from an older server means unknown, never enabled or successful.
+Button feedback shows the received BLE gesture and the completed action separately, each for four seconds.
+A receipt confirms only that the phone received the event; it never claims capture started.
 Protocol events (tap=1, double=2, long=3, down=4, up=5) remain diagnostic; firmware
 may omit edges. Down/up must not toggle capture or start voice commands.
 On the offline transcript screen, ASR errors belong in the transcript body;
@@ -59,6 +62,10 @@ without generating configuration or building. Retries must re-observe the failed
 stage; keep certificate subjects and device identifiers in memory only.
 
 ## Build Bootstrap
+
+The canonical Flutter version is `environment.flutter` in `pubspec.yaml`; CI and
+iPhone preflight read it directly. Verify with `flutter pub get --enforce-lockfile`;
+update the version and lock together when intentionally upgrading. See `../docs/DEVELOPMENT.md`.
 
 ### Flavors
 - **dev**: Android `com.friend.ios.dev`, iOS `com.friend-app-with-wearable.ios12.development` — uses `.dev.env`, Firebase project `based-hardware-dev`

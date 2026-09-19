@@ -487,6 +487,71 @@ void main() {
     });
   });
 
+  test('button receipt expires while Start waits and result starts its own lifetime', () {
+    fakeAsync((async) {
+      Env.setRuntimeModeForTesting(OmiRuntimeMode.offline);
+      final buttons = StreamController<List<int>>.broadcast(sync: true);
+      final provider = _ButtonCaptureProvider(
+        buttonListenerLoader: (_, callback) async => buttons.stream.listen(callback),
+      )..startGate = Completer<void>();
+      provider.streamDeviceRecording(device: _device(id: 'synthetic-button', type: DeviceType.omi));
+      async.flushMicrotasks();
+
+      buttons.add([1, 0, 0, 0]);
+      expect(provider.lastOmiButtonEvent, OmiButtonEvent.singleTap);
+      expect(provider.localCapturePhase, LocalCapturePhase.starting);
+      expect(provider.localOmiButtonFeedback, isNull);
+      async.elapse(const Duration(seconds: 4));
+      expect(provider.lastOmiButtonEvent, isNull);
+      expect(provider.localCapturePhase, LocalCapturePhase.starting);
+      expect(provider.localOmiButtonFeedback, isNull);
+
+      provider.startGate!.complete();
+      async.flushMicrotasks();
+      expect(provider.localOmiButtonFeedback, LocalOmiButtonAction.started);
+      expect(provider.localCapturePhase, LocalCapturePhase.waitingAudio);
+      expect(provider.lastOmiButtonEvent, isNull);
+      async.elapse(const Duration(seconds: 3));
+      expect(provider.localOmiButtonFeedback, LocalOmiButtonAction.started);
+      async.elapse(const Duration(seconds: 1));
+      expect(provider.localOmiButtonFeedback, isNull);
+      expect(provider.calls, ['start']);
+
+      provider.dispose();
+      buttons.close();
+      async.flushMicrotasks();
+      Env.setRuntimeModeForTesting(null);
+    });
+  });
+
+  test('button receipt expires and repeated edges extend receipt without starting audio', () {
+    fakeAsync((async) {
+      Env.setRuntimeModeForTesting(OmiRuntimeMode.offline);
+      final buttons = StreamController<List<int>>.broadcast(sync: true);
+      final provider = _ButtonCaptureProvider(
+        buttonListenerLoader: (_, callback) async => buttons.stream.listen(callback),
+      );
+      provider.streamDeviceRecording(
+        device: _device(id: 'synthetic-button', type: DeviceType.omi),
+      );
+      async.flushMicrotasks();
+      buttons.add([4, 0, 0, 0]);
+      expect(provider.lastOmiButtonEvent, OmiButtonEvent.pressed);
+      async.elapse(const Duration(seconds: 3));
+      buttons.add([4, 0, 0, 0]);
+      async.elapse(const Duration(seconds: 3));
+      expect(provider.lastOmiButtonEvent, OmiButtonEvent.pressed);
+      async.elapse(const Duration(seconds: 1));
+      expect(provider.lastOmiButtonEvent, isNull);
+      expect(provider.localOmiButtonFeedback, isNull);
+      expect(provider.calls, isEmpty);
+      provider.dispose();
+      buttons.close();
+      async.flushMicrotasks();
+      Env.setRuntimeModeForTesting(null);
+    });
+  });
+
   test('local button edges are visible without starting recording or a voice command', () async {
     Env.setRuntimeModeForTesting(OmiRuntimeMode.offline);
     final buttons = StreamController<List<int>>.broadcast(sync: true);

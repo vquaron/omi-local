@@ -5,7 +5,7 @@
 # Prerequisites (stable versions, use these or higher):
 #
 # Common for all developers:
-# - Flutter SDK (v3.44.5)
+# - Flutter SDK: exact version from environment.flutter in pubspec.yaml
 # - Opus Codec: https://opus-codec.org
 #
 # For iOS Developers:
@@ -409,6 +409,25 @@ function _version_at_least() {
   [ "$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -n1)" = "$want" ]
 }
 
+# Shared by Profile setup and the prepared Debug launcher.
+function check_flutter_version() {
+  local version required_flutter
+  required_flutter=$(awk '
+    /^environment:/ { in_environment=1; next }
+    in_environment && /^[^[:space:]#]/ { exit }
+    in_environment && $1 == "flutter:" { gsub(/"/, "", $2); print $2; exit }
+  ' "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/pubspec.yaml") || return 1
+  if ! [[ "$required_flutter" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo 'В pubspec.yaml должна быть указана точная версия environment.flutter.' >&2
+    return 1
+  fi
+  if ! version=$(flutter --version 2>/dev/null) || ! [[ "$version" =~ Flutter[[:space:]]+([^[:space:]]+) ]] || [[ "${BASH_REMATCH[1]}" != "$required_flutter" ]]; then
+    echo "Нужен Flutter $required_flutter из app/pubspec.yaml в PATH. Установка: https://docs.flutter.dev/install" >&2
+    echo 'Выберите эту версию SDK; после изменения PATH откройте новый Terminal и повторите проверку.' >&2
+    return 1
+  fi
+}
+
 # Named checks with remedies, matching the harness's own pattern
 # (scripts/dev-harness's `Cannot start; missing prerequisites:` block) instead
 # of letting a missing/outdated tool surface as a confusing downstream failure
@@ -428,11 +447,7 @@ function check_ios_prerequisites() {
     echo 'Не найден iOS SDK. В Xcode → Settings → Components установите поддержку iOS.' >&2
     return 1
   fi
-  if ! version=$(flutter --version 2>/dev/null) || ! [[ "$version" =~ Flutter[[:space:]]+([0-9.]+) ]] || ! _version_at_least "${BASH_REMATCH[1]}" 3.44.5; then
-    echo 'Нужен Flutter 3.44.5 или новее в PATH. Установка: https://docs.flutter.dev/install' >&2
-    echo 'Для обновления: flutter upgrade. После изменения PATH откройте новый Terminal и повторите установку.' >&2
-    return 1
-  fi
+  check_flutter_version || return 1
   if ! version=$(pod --version 2>/dev/null) || ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || ! _version_at_least "$version" 1.16.2; then
     echo 'Нужен рабочий CocoaPods 1.16.2 или новее: brew install cocoapods (обновление: brew upgrade cocoapods).' >&2
     echo 'Если Homebrew ещё не установлен, сначала запустите start.command из корня проекта.' >&2

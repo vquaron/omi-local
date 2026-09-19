@@ -59,7 +59,7 @@ h1 span { font-size:14px; font-weight:400; vertical-align:middle; color:var(--mu
 .monitor-badge[data-tone=active] { color:#356246; background:#edf4ee; border-color:#c5d8ca; }
 .monitor-badge[data-tone=error],.monitor-badge[data-tone=waiting] { color:#854522; background:#faf1e8; border-color:#ead4bd; }
 .monitor-note { color:var(--muted); font-size:13px; line-height:1.7; margin:16px 0 24px; }
-.monitor-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:25px 0 32px; }
+.monitor-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:25px 0 32px; }
 .monitor-card { border:1px solid var(--line); border-radius:9px; padding:16px 14px; display:flex; flex-direction:column; gap:10px; overflow-wrap:anywhere; }
 .monitor-card-label { font-size:11px; letter-spacing:.4px; color:var(--muted); }
 .monitor-card strong { font-size:14px; font-weight:550; }

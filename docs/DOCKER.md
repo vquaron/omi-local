@@ -304,3 +304,10 @@ remain unverified. Their configuration is prepared; hardware success is not clai
 
 Native Mac Parakeet Live is not included in the container: live preview is disabled
 by default. Saved settings and explicitly selected Live providers are preserved.
+
+### Recording without live text
+
+The default Docker STT service transcribes completed WAVs after Stop. Live STT is
+disabled unless a live provider is configured. Disabled live processing is not a
+recording error. Open the library on port 21001, select a recording, and use the
+player at the bottom; recordings with no detected speech still have playable audio.

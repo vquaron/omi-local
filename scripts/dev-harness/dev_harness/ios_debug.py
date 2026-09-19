@@ -60,6 +60,10 @@ def prepare(root):
         raise LocalEnvError('Debug iPhone sessions require macOS')
     env = tool_environment(root)
     app = root / 'app'
+    try:
+        capture(['bash', '-c', 'source ./setup.sh; check_flutter_version'], env=env, cwd=app)
+    except LocalEnvError:
+        raise LocalEnvError('Select the Flutter SDK declared in app/pubspec.yaml and repeat the check') from None
     required = ('ios/Flutter/PersonalTeam.xcconfig', 'ios/Pods/Manifest.lock', '.dart_tool/package_config.json',
                 'lib/env/dev_env.g.dart', '.dev.env')
     if any(not (app / name).is_file() for name in required):

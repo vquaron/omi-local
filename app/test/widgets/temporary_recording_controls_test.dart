@@ -192,6 +192,7 @@ void main() {
       capture.notifyListeners();
       await tester.pump();
       expect(find.byKey(const Key('local_omi_button_feedback')), findsNothing);
+      expect(find.byKey(const Key('local_omi_button_receipt')), findsOneWidget);
       expect(find.text('Запись не идёт'), findsOneWidget);
     }
     capture.buttonAction = LocalOmiButtonAction.started;
@@ -241,7 +242,8 @@ void main() {
     await tester.pump();
     final l10n = AppLocalizations.of(tester.element(find.byKey(const Key('local_capture_page_state'))));
     expect(tester.widget<Text>(find.byKey(const Key('local_capture_page_state'))).data, l10n.paused);
-    expect(find.text('Omi · Кнопка отпущена'), findsNothing);
+    expect(find.text('Omi · Кнопка отпущена'), findsOneWidget);
+    expect(find.byKey(const Key('local_omi_button_feedback')), findsNothing);
     expect(find.text(l10n.listening), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

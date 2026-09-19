@@ -216,6 +216,7 @@ def run_probe():
                 'backend': 'ready',
                 'capture': {'state': 'idle', 'audio_seconds': 0, 'frames_received': 0},
                 'live_transcript': {'state': 'disabled', 'updates': 0},
+                'diarization': {'state': 'disabled', 'labeled_segments': 0},
             }
             headers = {'Authorization': 'Bearer ' + 'a' * 43}
             preview = client.get('/v1/local/preview?uid=synthetic-attacker', headers=headers)

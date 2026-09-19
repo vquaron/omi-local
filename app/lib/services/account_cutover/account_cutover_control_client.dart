@@ -47,7 +47,7 @@ class AccountCutoverControlClient {
 
   Future<AccountCutoverFetchResult> fetchControl() async {
     try {
-      return _fetch != null ? await _fetch!() : await _defaultFetch();
+      return _fetch != null ? await _fetch() : await _defaultFetch();
     } catch (e, st) {
       Logger.debug('Account cutover control fetch failed: $e\n$st');
       return const AccountCutoverFetchResult.transportFailure();

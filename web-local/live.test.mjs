@@ -41,11 +41,11 @@ function monitor(t) {
   t.mock.method(globalThis, 'fetch', (url, options) => new Promise((resolve, reject) => {
     assert.equal(url, '/api/runtime');
     assert.equal(options.cache, 'no-store');
-    requests.push({signal: options.signal, reject, reply: text => resolve({ok: true, json: async () => ({
+    requests.push({signal: options.signal, reject, reply: (text, diarization) => resolve({ok: true, json: async () => ({
       backend: 'ready', capture: {state: 'received', frames_received: requests.length},
       sessions: [{source: 'omi', preview_id: 'synthetic-draft', text}],
       live_transcript: {state: 'streaming', updates: requests.length}, final_stt: {state: 'ready'}, events: [],
-      observed_at: '2026-09-10T12:00:00Z',
+      observed_at: '2026-09-10T12:00:00Z', diarization,
     })})});
   }));
   mountLiveMonitor(root);
@@ -116,4 +116,26 @@ test('restoration during a pending fetch discards stale results without overlapp
   await settle();
   assert.match(ui.root.textContent, /Текущий черновик/);
   assert.equal(ui.timers.size, 1);
+});
+
+
+test('diarization distinguishes service readiness, labels, degradation and lost status', async t => {
+  const ui = monitor(t);
+  for (const [state, label, count] of [
+    ['ready', 'Сервис готов', 0], ['pending', 'ожидаем метки', 0],
+    ['labeled', 'Метки получены', 3], ['degraded', 'Ошибка диаризации', 0],
+    ['disabled', 'Выключена', 0], ['unknown', 'Неизвестно', 0],
+  ]) {
+    if (ui.requests.length > 1 || state !== 'ready') ui.tick();
+    ui.requests.at(-1).reply('Текст продолжает поступать', {state, labeled_segments: count});
+    await settle();
+    assert.ok(ui.root.textContent.includes(label));
+    assert.match(ui.root.textContent, /Live-текст получен/);
+    if (state === 'labeled') assert.match(ui.root.textContent, /текущем тексте: 3/);
+    else assert.doesNotMatch(ui.root.textContent, /текущем тексте: 3/);
+  }
+  ui.tick();
+  ui.requests.at(-1).reject(new Error('Disconnected'));
+  await settle();
+  assert.doesNotMatch(ui.root.textContent, /Метки получены|Сервис готов/);
 });

@@ -9819,12 +9819,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String monthsFreeBadge(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count meses grátis',
-      one: '1 mês grátis',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count meses grátis', one: '1 mês grátis');
     return '$_temp0';
   }
 

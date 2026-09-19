@@ -411,6 +411,7 @@ def test_runtime_read_is_same_origin_and_does_not_return_credentials(library, mo
         assert str(req.url) == 'http://127.0.0.1:20000/v1/local/preview'
         return httpx.Response(200, json={'backend': 'ready', 'capture': {'state': 'received', 'frames_received': 1},
             'live_transcript': {'state': 'streaming', 'updates': 1},
+            'diarization': {'state': 'labeled', 'labeled_segments': 2},
             'sessions': [{'preview_id': 'ephemeral-draft', 'source': 'phone', 'text': 'Синтетический черновик'}]})
     factory = httpx.Client
     def client(**kwargs):
@@ -423,6 +424,7 @@ def test_runtime_read_is_same_origin_and_does_not_return_credentials(library, mo
     assert status == 200 and headers['Cache-Control'] == 'no-store'
     data = json.loads(body)
     assert data['sessions'][0]['text'] == 'Синтетический черновик'
+    assert data['diarization'] == {'state': 'labeled', 'labeled_segments': 2}
     assert b'synthetic-private-key' not in body
     assert 'Синтетический черновик' not in json.dumps(data['events'], ensure_ascii=False)
     assert 'text' not in runtime.previous['sessions'][0]
@@ -468,6 +470,7 @@ def test_runtime_final_timeout_preserves_healthy_live_draft(library, monkeypatch
         assert req.extensions['timeout']['read'] == 2
         return httpx.Response(200, json={'backend': 'ready', 'capture': {'state': 'received', 'frames_received': 1},
             'live_transcript': {'state': 'streaming', 'updates': 1},
+            'diarization': {'state': 'labeled', 'labeled_segments': 2},
             'sessions': [{'preview_id': 'ephemeral-draft', 'source': 'phone', 'text': 'Синтетический черновик'}]})
 
     factory = httpx.Client
@@ -478,6 +481,7 @@ def test_runtime_final_timeout_preserves_healthy_live_draft(library, monkeypatch
     assert status == 200 and data['backend'] == 'ready'
     assert data['live_transcript']['state'] == 'streaming'
     assert data['sessions'][0]['text'] == 'Синтетический черновик'
+    assert data['diarization'] == {'state': 'labeled', 'labeled_segments': 2}
     assert data['final_stt']['state'] == 'unavailable'
     assert data['final_stt']['provider'] == 'Argmax · WhisperKit'
     assert b'synthetic-private-final-error' not in body

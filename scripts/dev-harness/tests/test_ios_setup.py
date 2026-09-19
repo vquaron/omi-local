@@ -49,7 +49,7 @@ xcodebuild() {
 flutter() {
   if [[ "$1" == --version ]]; then
     [[ "${TEST_FAIL:-}" != flutter ]] || return 1
-    echo 'Flutter 3.44.5'
+    echo "Flutter ${TEST_FLUTTER_VERSION:-3.47.4}"
   else
     echo '[{"id":"TEST-PHONE","targetPlatform":"ios","emulator":false,"isSupported":true}]'
   fi
@@ -107,6 +107,16 @@ def test_tools_stop_with_remedy_before_signing_or_phone(ios, failure, message):
     assert result.returncode != 0 and message in result.stderr
     assert 'signing' not in (root / 'events').read_text()
     assert 'phone' not in (root / 'events').read_text()
+
+
+@pytest.mark.parametrize('version', ['3.44.5', '3.48.0', '3.47.4-0.1.pre'])
+def test_sdk_mismatch_stops_before_signing_or_phone(ios, version):
+    root, _, _ = ios
+    result = run(ios, TEST_FLUTTER_VERSION=version)
+    assert result.returncode != 0
+    assert 'Flutter 3.47.4 из app/pubspec.yaml' in result.stderr
+    events = (root / 'events').read_text()
+    assert 'signing' not in events and 'phone' not in events
 
 
 @pytest.mark.parametrize('failure', ['missing_key', 'wrong_team', 'missing_certificate', 'keychain'])
@@ -199,7 +209,7 @@ def test_interactive_wait_rechecks_each_stage_and_can_cancel(ios, cancel):
 def test_check_only_entry_does_not_build_or_generate_config(ios):
     root, _, _ = ios
     checkout = root / 'clean checkout'
-    for name in ['start.command', 'app/setup.sh', 'scripts/macos-runtime.sh']:
+    for name in ['start.command', 'app/setup.sh', 'app/pubspec.yaml', 'scripts/macos-runtime.sh']:
         target = checkout / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((ROOT / name).read_bytes())
@@ -214,6 +224,22 @@ def test_check_only_entry_does_not_build_or_generate_config(ios):
     assert 'Сборка и установка не запускались' in result.stdout
     assert 'TEST-PHONE' not in result.stdout + result.stderr
     assert {p: p.read_bytes() for p in checkout.rglob('*') if p.is_file()} == before
+
+
+def test_debug_sdk_mismatch_stops_before_reading_signing_or_device(monkeypatch, tmp_path):
+    monkeypatch.setattr(ios_debug.sys, 'platform', 'darwin')
+    monkeypatch.setattr(ios_debug, 'tool_environment', lambda root: {})
+    calls = []
+
+    def rejected(args, **kwargs):
+        calls.append((args, kwargs.get('cwd')))
+        raise ios_debug.LocalEnvError('Tool check failed')
+
+    monkeypatch.setattr(ios_debug, 'capture', rejected)
+    with pytest.raises(ios_debug.LocalEnvError, match='Flutter SDK declared in app/pubspec.yaml'):
+        ios_debug.prepare(tmp_path)
+    assert calls == [(['bash', '-c', 'source ./setup.sh; check_flutter_version'], tmp_path / 'app')]
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_debug_build_attest_run_and_reuse_order(monkeypatch, tmp_path, capsys):

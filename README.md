@@ -42,7 +42,7 @@ inside the containers. Installing the iPhone app still requires a Mac with Xcode
 | iPhone | The local Omi app, installed separately |
 | Recording device | Omi CV1 |
 | Transport | An [ngrok account](https://dashboard.ngrok.com) and internet access |
-| iOS development | Flutter 3.44.5 or later, CocoaPods, and an Apple account for signing |
+| iOS development | Flutter 3.47.4, CocoaPods, and an Apple account for signing |
 | Initial setup | Internet access for dependencies and models; at least 4 GiB of free space for model preparation |
 
 The Mac must remain awake while receiving recordings. A free Apple Personal Team
