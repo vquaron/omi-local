@@ -16,6 +16,12 @@ cp "$SOURCE_PLIST" "$OUTPUT_PLIST"
 /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true' "$OUTPUT_PLIST"
 
 if [[ "$MODE" == 'personal' ]]; then
+  # iOS 17+ supports IPv4 CIDR exceptions; the paired-origin policy restricts
+  # requests further to the selected host and port inside this encrypted VPN.
+  # https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsexceptiondomains
+  /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity:NSExceptionDomains dict' "$OUTPUT_PLIST"
+  /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity:NSExceptionDomains:100.64.0.0/10 dict' "$OUTPUT_PLIST"
+  /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity:NSExceptionDomains:100.64.0.0/10:NSExceptionAllowsInsecureHTTPLoads bool true' "$OUTPUT_PLIST"
   delete_key() {
     /usr/libexec/PlistBuddy -c "Delete :$1" "$OUTPUT_PLIST" >/dev/null 2>&1 || true
   }

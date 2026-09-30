@@ -4,7 +4,7 @@ For containers on Mac CPU or Linux/WSL2 NVIDIA, see [Docker](DOCKER.md).
 
 Recording requires a separately installed local Omi app.
 `start.command` prepares Mac services but does not install the phone app.
-After installation, connect it using the [ngrok guide](NGROK.md).
+After installation, connect it using [Tailscale](TAILSCALE.md) or the optional [ngrok guide](NGROK.md).
 
 ## Preparing your Mac
 
@@ -20,9 +20,9 @@ handle links and Bluetooth background/foreground transitions.
 1. Install Xcode from the App Store, open it, accept the license, and wait for the
    iOS components to finish installing. Under **Settings → Locations → Command Line
    Tools**, select the installed Xcode.
-2. Install [Flutter for iOS](https://docs.flutter.dev/platform-integration/ios/setup)
-   and add it to PATH as documented. Use version 3.47.4 to match the app dependency
-   lock and CI checks.
+2. The launcher automatically uses an existing SDK at `.local/toolchains/flutter`
+   in this checkout; otherwise it uses Flutter from PATH. Install [Flutter for iOS](https://docs.flutter.dev/platform-integration/ios/setup)
+   and add it to PATH as documented. Use version 3.47.4 to match the app dependency lock and CI checks.
 3. After `start.command` prepares Homebrew, install
    [CocoaPods](https://formulae.brew.sh/formula/cocoapods): `brew install cocoapods`.
    Run `flutter doctor -v`: the Xcode section must have no errors.
@@ -61,11 +61,13 @@ bash setup.sh ios personal
 ```
 
 The script checks Xcode and the iOS SDK, Flutter, CocoaPods, the certificate with
-its private key, and phone availability. The Team ID prompt hides your input.
+its private key, and phone availability. It reuses the Team ID from an existing
+private `app/ios/Flutter/PersonalTeam.xcconfig` and verifies its signing identity.
+An explicit `OMI_APPLE_TEAM_ID` overrides it. First-time Team ID input is hidden.
 If something is missing, follow the displayed instructions and press Enter to
 retry; `q` exits setup. Installation starts only after all checks pass.
 
-To check without building or installing, run `./start.command --iphone-check`
+To check without building or installing, run `./iphone.command --check`
 from the repository root. You can fix issues and retry checks in this mode too.
 Xcode verifies the Apple Account's access to provisioning during signing;
 a certificate alone does not prove that the account session is still valid.

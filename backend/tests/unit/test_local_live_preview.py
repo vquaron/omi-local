@@ -388,11 +388,12 @@ def test_live_readiness_observes_model_health_without_following_redirects(monkey
     assert local_transcription_status.live_status()['status'] == status
 
 
-def test_profile_status_is_opt_in_and_rejects_external_live_probe(monkeypatch):
+@pytest.mark.parametrize('transport', ['ngrok', 'tailscale'])
+def test_profile_status_is_opt_in_and_rejects_external_live_probe(monkeypatch, transport):
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     monkeypatch.delenv('OMI_LOCAL_TRANSPORT', raising=False)
     assert local_transcription_status.local_transcription_status() is None
-    monkeypatch.setenv('OMI_LOCAL_TRANSPORT', 'ngrok')
+    monkeypatch.setenv('OMI_LOCAL_TRANSPORT', transport)
     monkeypatch.delenv('OMI_HARNESS_STATE_ROOT', raising=False)
     monkeypatch.setenv('OMI_LOCAL_LIVE_PREVIEW_URL', 'wss://private.example/asr')
     def forbidden(*args, **kwargs):

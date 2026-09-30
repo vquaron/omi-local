@@ -3276,12 +3276,13 @@
     "conversationsNotCapturedCount": "Не записано ({count})",
     "transcriptionNoAudio": "Транскрипция не получает аудио",
     "localMacTitle": "Локальный Mac",
-    "localMacAddress": "HTTPS-адрес",
+    "localMacAddress": "Tailscale IP / HTTPS",
     "localMacAccessKey": "Ключ доступа приложения",
     "localMacConnect": "Проверить и подключить",
     "localMacKeyRejected": "Ключ доступа отклонён. Проверьте ключ на Mac.",
     "localMacConnectionFailed": "Не удалось подключиться. Проверьте адрес и убедитесь, что Mac и туннель работают.",
-    "localMacHelp": "Введите адрес и ключ приложения с Mac. Подключение остановит текущую запись. Аудио передаётся через ngrok и хранится на вашем Mac.",
+    "localMacHelp": "Введите Tailscale IP (или IP:порт) либо HTTPS-адрес ngrok и ключ приложения. Подключение остановит запись. Аудио хранится на вашем сервере.",
     "memoryHistoryPartial": "Показана часть истории воспоминаний.",
-    "tapPlusToStartRecording": "Нажмите +, чтобы начать запись."
+    "tapPlusToStartRecording": "Нажмите +, чтобы начать запись.",
+    "localMacServers": "Сохранённые серверы"
 }

@@ -6,7 +6,7 @@ omi_require_apple_silicon "$PWD/scripts/local-mac.sh" "$@"
 if [ "${1:-}" = install ]; then
   exec bash scripts/install-local-mac.sh
 fi
-export PROVIDER_MODE=offline OMI_ENV_STAGE=offline OMI_LOCAL_TRANSPORT=ngrok
+export PROVIDER_MODE=offline OMI_ENV_STAGE=offline
 export OMI_DEV_HOST=127.0.0.1 OMI_DEV_BIND_HOST=127.0.0.1
 export OMI_LOCAL_INSTANCE="${OMI_LOCAL_INSTANCE:-ngrok}"
 export OMI_HARNESS_PORT_OFFSET="${OMI_HARNESS_PORT_OFFSET:-12000}"

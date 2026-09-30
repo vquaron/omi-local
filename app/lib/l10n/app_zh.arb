@@ -3263,12 +3263,13 @@
     "conversationsNotCapturedCount": "未记录 ({count})",
     "transcriptionNoAudio": "转录未接收到音频",
     "localMacTitle": "Local Mac",
-    "localMacAddress": "HTTPS address",
+    "localMacAddress": "Tailscale IP / HTTPS",
     "localMacAccessKey": "App access key",
     "localMacConnect": "Check and connect",
     "localMacKeyRejected": "The access key was rejected. Check the key on your Mac.",
     "localMacConnectionFailed": "Could not connect. Check the address and that your Mac and tunnel are running.",
-    "localMacHelp": "Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.",
+    "localMacHelp": "输入 Tailscale IP（或 IP:端口）或 ngrok HTTPS 地址以及应用密钥。连接将停止录音。音频保存在您的服务器上。",
     "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
-    "tapPlusToStartRecording": "Tap + to start recording"
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "localMacServers": "已保存的服务器"
 }

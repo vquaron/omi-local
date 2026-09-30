@@ -12,5 +12,5 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              device_ids: ['${OMI_DOCKER_GPU_ID:-0}']
               capabilities: [gpu]

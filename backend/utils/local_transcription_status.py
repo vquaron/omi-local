@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from utils.env_loader import is_offline_runtime
+from utils.local_transport_auth import local_tunnel_enabled
 from utils.local_live_preview import preview_url
 
 
@@ -85,6 +86,6 @@ def final_status():
 
 
 def local_transcription_status():
-    if not is_offline_runtime() or os.environ.get('OMI_LOCAL_TRANSPORT') != 'ngrok':
+    if not is_offline_runtime() or not local_tunnel_enabled():
         return None
     return {'live': live_status(), 'final': final_status()}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import hashlib
 import fcntl
 from pathlib import Path
@@ -12,7 +13,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from . import local_openai_stt
+from . import config, local_openai_stt
 
 
 class ServiceError(ValueError):
@@ -144,23 +145,50 @@ def health(cfg, service, live=None):
         return False, 'STT service unavailable'
 
 
+def preflight_argmax(cfg):
+    """Check an enabled owned server's files without requiring its HTTP listener."""
+    data = settings(cfg, 'argmax-stt.json')
+    if not data or data.get('enabled') is False:
+        return {}
+    try:
+        if data.get('enabled') is not True or type(data['port']) is not int or not 1024 <= data['port'] <= 65535:
+            raise ValueError()
+        if not isinstance(data['model'], str) or not data['model'].strip():
+            raise ValueError()
+        binary = Path(data['binary'])
+        if not binary.is_file() or not os.access(binary, os.X_OK):
+            raise ValueError()
+        for key in ('model_dir', 'tokenizer_dir'):
+            if not Path(data[key]).is_dir():
+                raise ValueError()
+        return data
+    except (KeyError, TypeError, ValueError, OSError):
+        raise ServiceError('Configured Argmax files are unavailable; preserve the selected model and prepare its local files') from None
+
+
+def owns_final_engine(cfg, engine):
+    if engine.engine != 'openai-compatible':
+        return False
+    data = preflight_argmax(cfg)
+    return bool(data and engine.model == data['model']
+                and engine.provider_url.rstrip('/') == f"http://127.0.0.1:{data['port']}/v1")
+
+
 def start_configured(cfg, *, live_override=_UNSET, include_argmax=True, start_relay=True):
     from . import cli, config
-    if cfg.provider_mode != 'offline' or cfg.local_transport != 'ngrok':
+    if cfg.provider_mode != 'offline' or cfg.local_transport not in config.PAIRED_TRANSPORTS:
         return
+    argmax = preflight_argmax(cfg) if include_argmax else {}
     # A legacy proxy may be repointed to the relay below. Establish that hop
     # before replacing any owned worker, including on normal harness startup.
     if start_relay and registry_exists(cfg):
         start_provider_relay(cfg)
-    argmax = settings(cfg, 'argmax-stt.json') if include_argmax else {}
     live = live_settings(cfg) if live_override is _UNSET else live_override
     diarization = diarization_settings(live)
     commands = []
     if argmax.get('enabled'):
         port = argmax['port']
         local_openai_stt.validate_url(f'http://127.0.0.1:{port}/v1')
-        for key in ('binary', 'model_dir', 'tokenizer_dir'):
-            Path(argmax[key]).resolve(strict=True)
         commands.append(('argmax-stt', [sys.executable, str(Path(__file__).with_name('run_argmax.py')),
                                       '--settings', str(cfg.layout.state_root / 'argmax-stt.json'),
                                       '--settings-digest', hashlib.sha256(json.dumps(argmax, sort_keys=True).encode()).hexdigest()],
@@ -304,7 +332,7 @@ def activate(cfg, snapshot, *, publish, rollback=None):
     from . import cli
     from .local_provider_relay import port, probe, session_gate
     from .local_providers import Registry
-    if cfg.provider_mode != 'offline' or cfg.local_transport != 'ngrok':
+    if cfg.provider_mode != 'offline' or cfg.local_transport not in config.PAIRED_TRANSPORTS:
         raise ServiceError('Live provider settings require the owned loopback stack')
     live = snapshot_settings(snapshot)
     if live:
@@ -329,16 +357,18 @@ def activate(cfg, snapshot, *, publish, rollback=None):
                 asyncio.run(probe(snapshot, cfg, key=Registry(cfg).key(snapshot)))
             status = _capture_status(cfg)
             _legacy_drain_idle(cfg, status, drained)
+            configurable = status.get('live_transcript', {}).get('configurable')
+            restart_cfg = cfg if configurable else cli.backend_restart_config(cfg)
             published = True
             publish()
-            if status.get('live_transcript', {}).get('configurable'):
+            if configurable:
                 return
             record = cli._service_record(cfg, 'backend')
             if record is None:
                 raise ServiceError('Owned backend is unavailable')
             backend_changed = True
             cli._stop_single_service(cfg, record)
-            cli._start_app_services(cfg)
+            cli._start_app_services(restart_cfg)
             for _ in range(30):
                 try:
                     if _capture_status(cfg).get('live_transcript', {}).get('configurable'):
@@ -374,6 +404,7 @@ def apply(cfg):
     require_idle()
     start_configured(cfg)
     require_idle()  # Model startup may take minutes; recheck immediately before restart.
+    cfg = cli.backend_restart_config(cfg)
     record = cli._service_record(cfg, 'backend')
     if record is None:
         raise ServiceError('Owned backend is unavailable')

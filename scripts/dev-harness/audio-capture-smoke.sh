@@ -59,10 +59,14 @@ capture_root = storage_root / 'listen-captures'
 before = {path.name for path in capture_root.iterdir()} if capture_root.is_dir() else set()
 
 base_url = os.environ.get('OMI_AUDIO_BASE_URL', cfg.backend_url).rstrip('/')
-if cfg.local_transport == 'ngrok':
+if cfg.local_transport in {'ngrok', 'tailscale'}:
     from dev_harness.local_mac import endpoint, pairing_data
     if base_url != cfg.backend_url:
-        endpoint(base_url)
+        if cfg.local_transport == 'tailscale':
+            from dev_harness.local_transport import normalize_tailscale_url
+            normalize_tailscale_url(base_url)
+        else:
+            endpoint(base_url)
     key_fd = int(os.environ['OMI_AUDIO_ACCESS_KEY_FD'])
     with os.fdopen(key_fd) as stream:
         token = stream.read(128).strip()

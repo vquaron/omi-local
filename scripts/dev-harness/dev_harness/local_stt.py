@@ -453,7 +453,7 @@ def apply_diarization(engine, audio, folder, manifest, raw):
 
 
 def transcribe(cfg, audio_path: str, *, engine: EngineConfig | None = None) -> int:
-    if cfg.provider_mode != 'offline' or cfg.local_transport != 'ngrok':
+    if cfg.provider_mode != 'offline' or cfg.local_transport not in config.PAIRED_TRANSPORTS:
         raise TranscriptionError('Use the paired local Mac offline stack')
     audio = Path(audio_path).expanduser().resolve()
     manifest = inspect_audio(audio)

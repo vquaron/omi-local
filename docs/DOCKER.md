@@ -1,5 +1,79 @@
 # Docker: Mac CPU and NVIDIA GPU
 
+## Single-command setup
+
+Run the CLI from the repository root. The Docker adapter is self-contained and
+does not require Python, Node, Java or Redis on the host.
+
+```bash
+# CPU or Mac Docker Desktop
+./omiloc --runtime docker bootstrap --device cpu --transport local
+./omiloc --runtime docker up
+
+# Linux server with one NVIDIA GPU and Tailscale
+./omiloc --runtime docker bootstrap \
+  --device cuda --gpu 0 --transport tailscale
+./omiloc --runtime docker up
+./omiloc --runtime docker doctor --inference
+```
+
+Bootstrap builds the images, prepares the model volume, validates the selected
+GPU (CUDA mode), and writes `.env.docker`. It never starts the long-running
+stack. `up` uses the prepared images and cached model with `--no-build` and
+`--pull never`; if preparation is missing, it exits with the bootstrap command.
+The same saved selection is used by `status`, `logs`, `doctor`, `pair`, and
+`down`. `dev` starts Compose Watch in the foreground.
+
+## `.env.docker`
+
+`.env.docker` is a private, ignored file created by bootstrap. It is read as
+literal `NAME=value` data, never sourced as shell code, and must be mode `0600`.
+It is independent from the native `.env`; native ngrok tokens and app keys are
+never imported into Docker.
+
+Example:
+
+```dotenv
+OMI_DOCKER_DEVICE=cuda
+OMI_DOCKER_GPU_ID=0
+OMI_DOCKER_TRANSPORT=tailscale
+STT_MODEL=Systran/faster-whisper-small
+STT_REVISION=8f3f6b0d8d8b2b6d1a0d4c6e9b7a2f1c0d5e6f7a
+STT_THREADS=4
+```
+
+Supported fields are `OMI_DOCKER_DEVICE` (`cpu` or `cuda`),
+`OMI_DOCKER_GPU_ID` (numeric index or `GPU-...` UUID),
+`OMI_DOCKER_TRANSPORT` (`local`, `tailscale`, or `ngrok`), `STT_MODEL`,
+`STT_REVISION`, and `STT_THREADS`. Use the CLI bootstrap flags to create or
+change it; do not edit it while services are running. The model revision written
+by bootstrap is an immutable snapshot revision, so startup does not silently
+resolve a moving `main` branch.
+
+## Services outside the container
+
+The Docker command can build and run the application, Firebase emulator, Redis,
+web library, and STT worker. These host services still require separate setup:
+
+1. Docker Engine/Desktop with Compose 2.32 or later.
+2. For CUDA: a Linux NVIDIA driver and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), then a configured Docker runtime. Verify with `docker info` and a CUDA container before bootstrap.
+3. For phone access through Tailscale: install and sign in to Tailscale on the
+   Docker host and iPhone; allow TCP `21000` in the tailnet policy. Bootstrap
+   validates the host address but does not install or authenticate Tailscale.
+4. For remote administration: SSH access to the Docker host. Run all `omiloc`
+   commands in the checkout on that host. A local library tunnel is separate:
+
+```bash
+ssh -N -L 21002:127.0.0.1:21001 USER@SERVER
+```
+
+Then open `http://127.0.0.1:21002`. The authenticated iPhone API remains on
+the Tailscale address at port `21000`.
+
+The iPhone app itself is always outside Docker: install it with Xcode using
+`./iphone.command`. Docker cannot perform Apple signing, Bluetooth access, or
+physical CV1 pairing.
+
 ## First launch
 
 Install and start Docker Desktop on Mac or Docker Engine with Compose on Linux.
@@ -15,26 +89,27 @@ For a new checkout of the main branch:
 ```bash
 git clone --branch main https://github.com/vquaron/omi-local.git omiloc
 cd omiloc
-./docker.sh up
+./omiloc --runtime docker bootstrap --device cpu --transport local
+./omiloc --runtime docker up
 ```
 
-If you already have the repository, run `./docker.sh up` from its root, beside
-`compose.yaml`. After merging, no separate feature branch or `.local/worktrees`
-path is needed. The first launch needs internet access for images, dependencies,
-and the model. It builds images, prepares the model cache, waits for the
-containers to become ready, and exits; services keep running in the background.
+If you already have the repository, run the same bootstrap command from its root.
+The first bootstrap needs internet access for images, dependencies, and the model.
+It leaves the services stopped; `up` starts them in the background.
 
 Open the **[audio library](http://127.0.0.1:21001/)**. Backend:
 `http://127.0.0.1:21000`. Browsing the interface does not require ngrok;
-for new iPhone recordings, complete [connection setup](#iphone-and-ngrok).
+for new iPhone recordings, use [Tailscale](#iphone-through-tailscale) or the
+optional [ngrok tunnel](#iphone-and-ngrok).
 
 | Action | Command from the project root |
 | --- | --- |
-| Start or rebuild after updating code | `./docker.sh up` |
-| Develop with automatic reload | `./docker.sh dev` |
-| Check container status | `./docker.sh status` |
-| Follow logs | `./docker.sh logs` |
-| Stop while preserving recordings, settings, and models | `./docker.sh down` |
+| Prepare or rebuild after changing the runtime | `./omiloc --runtime docker bootstrap` |
+| Receive iPhone audio through Tailscale | `./omiloc --runtime docker up` |
+| Develop with automatic reload | `./omiloc --runtime docker dev` |
+| Check container status | `./omiloc --runtime docker status` |
+| Follow logs | `./omiloc --runtime docker logs -f` |
+| Stop while preserving recordings, settings, and models | `./omiloc --runtime docker down` |
 
 `up` uses CPU on Mac; CUDA selection is described below. Ports and data are
 separate from native `start.command`. You do not need Python, Java, Node, or Redis
@@ -44,7 +119,7 @@ do not build or install the iOS app.
 ## Using Docker Compose directly
 
 These commands perform the same build, model preparation, and startup steps as
-`docker.sh`. Run them from the repository root. The stack has several services,
+the CLI. Run them from the repository root. The stack has several services,
 shared networking, and persistent volumes, so use Compose for direct Docker startup.
 
 ### CPU on Mac or Linux
@@ -70,7 +145,8 @@ docker compose -f compose.yaml -f compose.gpu.yaml up -d --wait
 ```
 
 Direct Compose commands select CPU or GPU through the file list;
-`OMI_DOCKER_DEVICE` and automatic GPU detection belong to `docker.sh` only.
+The CLI stores the selected device in `.env.docker`; keep that file with the
+checkout and use the same CLI for later commands.
 Keep the same file list for later commands. Export custom `STT_MODEL`,
 `STT_REVISION`, or `STT_THREADS` values before running the sequence so they apply
 to every step.
@@ -141,8 +217,9 @@ On Windows, use Docker Desktop with WSL2 and NVIDIA GPU support, and run command
 in WSL2. Do not install NVIDIA drivers on a Mac.
 
 ```bash
-OMI_DOCKER_DEVICE=cuda ./docker.sh up
-OMI_DOCKER_DEVICE=cuda ./docker.sh dev
+./omiloc --runtime docker bootstrap --device cuda --gpu 0
+./omiloc --runtime docker up
+./omiloc --runtime docker dev
 ```
 
 The default `auto` mode selects CUDA if the Docker server reports the `nvidia`
@@ -172,7 +249,9 @@ the container network and is not published on the host.
 For a fresh installation, you can select another CTranslate2 model:
 
 ```bash
-STT_MODEL=mobiuslabsgmbh/faster-whisper-large-v3-turbo OMI_DOCKER_DEVICE=cuda ./docker.sh up
+./omiloc --runtime docker bootstrap --device cuda --gpu 0 \
+  --model mobiuslabsgmbh/faster-whisper-large-v3-turbo
+./omiloc --runtime docker up
 ```
 
 Use the same `STT_MODEL`, `STT_REVISION`, and `OMI_DOCKER_DEVICE` values in all later
@@ -193,7 +272,7 @@ for additional stages.
 
 ## Development and updates
 
-`./docker.sh dev` runs in an open Terminal:
+`./omiloc --runtime docker dev` runs in an open Terminal:
 
 - Compose Watch synchronizes the Python backend; Uvicorn reloads changes.
 - HTML/JS/CSS come from the current `web-local`. The library refreshes the page or
@@ -205,10 +284,10 @@ Python restarts interrupt active WebSocket connections. Finish recording before
 changing backend/harness code. Settings, WAVs, the queue, and results remain in
 the volume. Models load into memory again after STT restarts.
 For Compose/nginx changes, stop dev mode and start it again.
-`Ctrl+C` ends dev mode; `./docker.sh down` stops the entire stack.
+`Ctrl+C` ends dev mode; `./omiloc --runtime docker down` stops the entire stack.
 
 Normal `up` uses the code inside the image. When switching between `dev` and
-normal mode, run `./docker.sh down` first, then the desired startup command.
+normal mode, run `./omiloc --runtime docker down` first, then the desired startup command.
 See [how Compose Watch works](https://docs.docker.com/compose/how-tos/file-watch/).
 
 ### Updating from main
@@ -216,27 +295,100 @@ See [how Compose Watch works](https://docs.docker.com/compose/how-tos/file-watch
 Finish recording and wait for processing to complete. From a clean checkout of main:
 
 ```bash
-./docker.sh down
+./omiloc --runtime docker down
 git pull --ff-only
-./docker.sh up
-./docker.sh status
+./omiloc --runtime docker up
+./omiloc --runtime docker status
 ```
 
 The saved named volumes are attached again; recordings, keys, and models are
-preserved. If ngrok is configured, run `./docker.sh tunnel` after startup.
-Updating the Docker environment alone does not require a new iPhone build.
+preserved. For Tailscale, select it in `.env.docker` with
+`./omiloc --runtime docker bootstrap --transport tailscale` before startup.
+If ngrok is configured, run `./omiloc --runtime docker tunnel` after startup.
+Updating the Docker environment alone does not require a new iPhone build; the
+phone must already have an app version that supports Tailscale addresses.
 Do not use `down -v`, delete volumes, or perform Docker cleanup for routine updates.
+
+## iPhone through Tailscale
+
+Connect the Docker host and iPhone to the same Tailscale network. Its access rules
+must allow the iPhone to reach TCP port **21000** on the host. Run from a local
+Docker context on that host. With Docker Desktop on Windows, the CLI must inspect
+the Windows host's Tailscale address, not a separate WSL2 guest VPN address;
+that configuration remains unverified.
+
+```bash
+./omiloc --runtime docker bootstrap --transport tailscale
+./omiloc --runtime docker up
+```
+
+The launcher detects the host's Tailscale IPv4 and verifies that Tailscale is
+connected before building or starting services. No ngrok account, token, domain,
+Tailscale Serve, or extra Python installation on the host is needed. Mac users
+may use the Tailscale app's bundled CLI; elsewhere `tailscale` must be on PATH.
+To use a particular installed CLI, set `OMI_TAILSCALE_CLI` to its executable path.
+For development, use `./omiloc --runtime docker dev` after selecting Tailscale.
+
+In the iPhone app's **Local Mac** screen, enter **the host Tailscale IPv4 followed
+by `:21000`** and the Docker app key, then check the connection. The port is required:
+entering only an IP defaults to the native Mac port `20000`. Retrieve the Docker
+key locally in your own Terminal; do not copy it into chat or logs:
+
+```bash
+docker compose exec app cat /data/connection.env
+```
+
+The app uses HTTP/WS inside the encrypted Tailscale network. The library remains
+at [localhost:21001](http://127.0.0.1:21001/); only the authenticated backend ingress
+is additionally published on the Tailscale IPv4. Firebase, Redis, STT, and internal
+backend sockets stay on container loopback. A binding failure stops startup;
+the launcher never substitutes `0.0.0.0` or the LAN address.
+
+You can also choose the transport through exported configuration:
+
+```bash
+export OMI_LOCAL_TRANSPORT=tailscale
+# Optional: set OMI_TAILSCALE_IP to this host's actual Tailscale IPv4.
+# If omitted, the launcher discovers and validates it on each startup.
+./omiloc --runtime docker up
+```
+
+These are Docker host settings; the native `.env` is not imported into the Docker
+volume. New Tailscale volumes require only a generated app key. Existing keys,
+ngrok configuration, provider settings, and recordings are preserved. To switch
+an existing running stack, finish recording/processing, run `./omiloc --runtime docker down`,
+then start the selected transport. Stop/status/logs continue to work even when
+Tailscale is disconnected. Tailscale startup also stops this Compose project's
+optional ngrok tunnel if it was left running. Switching back to ngrok is explicit: unset the exported
+transport (or set it to `ngrok`), then follow the ngrok section below.
+
+For direct Compose use, verify that `tailscale status` reports a connected host,
+then set its own IPv4 and include the override in every build/start command:
+
+```bash
+export OMI_TAILSCALE_IP="$(tailscale ip -4)"
+docker compose -f compose.yaml -f compose.tailscale.yaml build app stt download
+docker compose -f compose.yaml -f compose.tailscale.yaml run --rm --no-deps download
+docker compose -f compose.yaml -f compose.tailscale.yaml up -d --wait
+```
+
+Use `./omiloc --runtime docker bootstrap --transport tailscale` for automatic
+address and connection validation.
+The same override combines with `compose.gpu.yaml` and `compose.dev.yaml`.
+This does not connect Omi Bluetooth directly to the host: audio still comes from
+CV1 → iPhone → Tailscale → Docker host. Physical phone/CV1 recording and access
+from another tailnet device still need verification on the target devices.
 
 ## iPhone and ngrok
 
-Start `./docker.sh up` first: `configure` runs inside an already running container.
+Start `./omiloc --runtime docker up` first: `configure` runs inside an already running container.
 To receive iPhone audio, configure a separate domain/tunnel in your own interactive Terminal:
 
 ```bash
-./docker.sh configure   # domain and hidden token prompt; preserve the app key
-./docker.sh down
-./docker.sh up
-./docker.sh tunnel
+./omiloc --runtime docker configure   # domain and hidden token prompt; preserve the app key
+./omiloc --runtime docker down
+./omiloc --runtime docker up
+./omiloc --runtime docker tunnel
 ```
 
 Settings are saved in the private volume. `configure` does not change a running
@@ -268,7 +420,9 @@ Keychain data, signing material, and real recordings are not copied into images.
 This preserves ownership checks and Firebase's correct export-on-exit behavior.
 `stt`, `ingress`, and the optional `tunnel` share Nginx's network namespace,
 which survives app and STT reloads. The internal backend, Firebase, Redis, and STT
-listen on 127.0.0.1. Nginx publishes only two ports, bound to host 127.0.0.1.
+listen on 127.0.0.1. Nginx normally publishes two ports on host 127.0.0.1.
+The Tailscale override adds only the backend ingress on the verified host VPN IPv4;
+the unauthenticated library stays loopback-only and ingress rejects local preview.
 The backend's outbound policy is unchanged; remote providers are accessed through
 the harness and its Live relay. This does not establish physical no-egress for the whole system.
 
@@ -277,7 +431,8 @@ For a remote library, use SSH forwarding with the same port 21001 and open
 `http://127.0.0.1:21001`; Host/Origin are intentionally not rewritten.
 Do not expose the unauthenticated UI to the LAN or public internet.
 
-On errors, start with `./docker.sh status` and `./docker.sh logs`.
+On errors, start with `./omiloc --runtime docker status` and
+`./omiloc --runtime docker logs`.
 Detailed harness logs are private and stored at `/data/harness/docker/logs/`
 inside `app`. Checks:
 
@@ -286,8 +441,10 @@ make test-docker PYTHON=/path/to/python3.11
 docker compose -f compose.yaml -f compose.gpu.yaml -f compose.dev.yaml config --quiet
 ```
 
-`make test-docker` checks the API, model-error failure behavior, and settings
-preservation without a GPU or model downloads. It runs in the existing
+`make test-docker` checks the API, model-error failure behavior, settings
+preservation, transport switching, and host-address validation without a GPU or
+model downloads. With the Compose CLI installed, it also renders the combined
+Tailscale/GPU/dev configuration and checks all published ports. It runs in the existing
 `transport-unit` CI job. Backend versions come from `pylock.runtime.toml`;
 ARM64 uses native wheels of the same versions, so x86_64 artifact hashes are not
 presented as an ARM64 lock.
@@ -304,6 +461,16 @@ remain unverified. Their configuration is prepared; hardware success is not clai
 
 Native Mac Parakeet Live is not included in the container: live preview is disabled
 by default. Saved settings and explicitly selected Live providers are preserved.
+
+On September 14, 2026, a separate Docker Desktop CPU stack was tested through the
+host's own Tailscale IPv4. Authenticated HTTP and an Opus WebSocket stream produced
+an exact 2-second, mono 16 kHz WAV with zero decode errors; the recording appeared
+in the localhost library and survived an app restart with its pairing key.
+Incorrect keys and external preview requests were rejected, and the library was
+unreachable through the Tailscale address. Graceful shutdown exported Firebase.
+No models were downloaded; STT was disabled for this transport check. This proves
+host binding and the synthetic audio path, not connectivity from a physical iPhone
+or another tailnet peer. Existing running services and data were left unchanged.
 
 ### Recording without live text
 

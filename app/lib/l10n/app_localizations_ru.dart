@@ -9975,7 +9975,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get localMacTitle => 'Локальный Mac';
 
   @override
-  String get localMacAddress => 'HTTPS-адрес';
+  String get localMacAddress => 'Tailscale IP / HTTPS';
 
   @override
   String get localMacAccessKey => 'Ключ доступа приложения';
@@ -9992,5 +9992,8 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get localMacHelp =>
-      'Введите адрес и ключ приложения с Mac. Подключение остановит текущую запись. Аудио передаётся через ngrok и хранится на вашем Mac.';
+      'Введите Tailscale IP (или IP:порт) либо HTTPS-адрес ngrok и ключ приложения. Подключение остановит запись. Аудио хранится на вашем сервере.';
+
+  @override
+  String get localMacServers => 'Сохранённые серверы';
 }

@@ -41,13 +41,19 @@ void main() {
 
   Future<void> tapFormButton(WidgetTester tester, String key) async {
     final button = find.byKey(ValueKey(key));
-    final formScroll = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
-    // The status card places these controls beyond the small test viewport;
-    // scrolling must also build lazy ListView children before tapping them.
+    final formScroll = find.descendant(of: find.byType(SingleChildScrollView), matching: find.byType(Scrollable)).first;
+    // Exercise controls through the scrollable form on the small test viewport.
     await tester.scrollUntilVisible(button, 160, scrollable: formScroll);
     await tester.pumpAndSettle();
     expect(button.hitTestable(), findsOneWidget);
     await tester.tap(button);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> enterField(WidgetTester tester, Finder field, String value) async {
+    final scroll = find.descendant(of: find.byType(SingleChildScrollView), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(field, 160, scrollable: scroll);
+    await tester.enterText(field, value);
     await tester.pumpAndSettle();
   }
 
@@ -95,8 +101,8 @@ void main() {
     expect(find.descendant(of: find.byType(AppBar), matching: find.text('Локальный Mac')), findsOneWidget);
     final field = tester.widget<TextField>(find.byKey(const ValueKey('local-mac-key')));
     expect(field.obscureText, isTrue);
-    await tester.enterText(find.byKey(const ValueKey('local-mac-address')), 'https://synthetic.ngrok.app');
-    await tester.enterText(find.byKey(const ValueKey('local-mac-key')), List.filled(43, 's').join());
+    await enterField(tester, find.byKey(const ValueKey('local-mac-address')), 'https://synthetic.ngrok.app');
+    await enterField(tester, find.byKey(const ValueKey('local-mac-key')), List.filled(43, 's').join());
     await tapFormButton(tester, 'local-mac-connect');
     expect(order, ['stop', 'probe']);
     expect(session.isSignedIn, isTrue);
@@ -132,8 +138,8 @@ void main() {
             session: session, statusFetcher: status, stopRecording: () async {}, refreshConnection: () async {}),
       ));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const ValueKey('local-mac-address')), 'https://synthetic.ngrok.app');
-      await tester.enterText(find.byKey(const ValueKey('local-mac-key')), List.filled(43, 's').join());
+      await enterField(tester, find.byKey(const ValueKey('local-mac-address')), 'https://synthetic.ngrok.app');
+      await enterField(tester, find.byKey(const ValueKey('local-mac-key')), List.filled(43, 's').join());
       await tapFormButton(tester, 'local-mac-connect');
       await tester.pumpAndSettle();
       expect(session.isSignedIn, isTrue);
@@ -172,13 +178,83 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('saved servers can be added selected edited and deleted without changing the active session',
+      (tester) async {
+    final key = List.filled(43, 's').join();
+    var probes = 0;
+    final session = LocalMacSession(probe: (base, _) async {
+      probes++;
+      if (base.host == '100.64.0.2') throw LocalMacUnauthorized();
+      return {'uid': 'alice'};
+    });
+    await openPage(tester, session);
+    await enterField(tester, find.byKey(const ValueKey('local-mac-name')), 'Home Mac');
+    await enterField(tester, find.byKey(const ValueKey('local-mac-address')), '100.64.0.1:21000');
+    await enterField(tester, find.byKey(const ValueKey('local-mac-key')), key);
+    await tapFormButton(tester, 'local-mac-connect');
+    expect(probes, 1);
+    expect(session.address, 'http://100.64.0.1:21000/');
+    await tapFormButton(tester, 'local-mac-add-server');
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('local-mac-address'))).controller!.text, isEmpty);
+    await enterField(tester, find.byKey(const ValueKey('local-mac-name')), 'Other Mac');
+    await enterField(tester, find.byKey(const ValueKey('local-mac-address')), '100.64.0.2:21000');
+    await enterField(tester, find.byKey(const ValueKey('local-mac-key')), key);
+    await tapFormButton(tester, 'local-mac-save');
+    expect((await session.readServers()).length, 2);
+    expect(probes, 1);
+    await enterField(tester, find.byKey(const ValueKey('local-mac-name')), 'Remote Mac');
+    await tapFormButton(tester, 'local-mac-save');
+    expect((await session.readServers()).length, 2);
+    await tester.pumpWidget(const SizedBox());
+    await openPage(tester, session);
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('local-mac-name'))).controller!.text, 'Remote Mac');
+    await tapFormButton(tester, 'local-mac-connect');
+    expect(session.address, 'http://100.64.0.1:21000/');
+    expect(session.accessKey, key);
+    await tapFormButton(tester, 'local-mac-servers');
+    await tester.tap(find.text('Home Mac').last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('local-mac-name'))).controller!.text, 'Home Mac');
+    expect(probes, 2); // Selection never probes or switches.
+    await tapFormButton(tester, 'local-mac-delete-server');
+    expect((await session.readServers()).single.name, 'Remote Mac');
+    expect(session.address, 'http://100.64.0.1:21000/');
+    await tester.pumpWidget(const SizedBox());
+    await openPage(tester, session);
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('local-mac-name'))).controller!.text, isEmpty);
+    expect((await session.readServers()).single.name, 'Remote Mac');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Tailscale address saves as a draft and connects using the explicit Docker port', (tester) async {
+    var probes = 0;
+    final session = LocalMacSession(probe: (base, _) async {
+      probes++;
+      expect(base.toString(), 'http://100.64.0.1:21000/');
+      return {'uid': 'alice'};
+    });
+    await openPage(tester, session);
+    await enterField(tester, find.byKey(const ValueKey('local-mac-address')), '100.64.0.1:21000');
+    await enterField(tester, find.byKey(const ValueKey('local-mac-key')), List.filled(43, 's').join());
+    await tapFormButton(tester, 'local-mac-save');
+    expect(probes, 0);
+    expect(session.isSignedIn, isFalse);
+    expect((await session.readSettings()).address, '100.64.0.1:21000');
+    await tapFormButton(tester, 'local-mac-connect');
+    expect(probes, 1);
+    expect(session.address, 'http://100.64.0.1:21000/');
+    expect(session.isSignedIn, isTrue);
+    expect(find.byType(LocalMacPage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('save and reopen retains settings; eye reveals key and background hides it', (tester) async {
     final session = LocalMacSession(probe: (_, __) async => throw StateError('Saving must not probe'));
     await openPage(tester, session);
     final addressField = find.byKey(const ValueKey('local-mac-address'));
     final keyField = find.byKey(const ValueKey('local-mac-key'));
-    await tester.enterText(addressField, 'https://synthetic.ngrok.app');
-    await tester.enterText(keyField, 'synthetic-draft-key');
+    await enterField(tester, addressField, 'https://synthetic.ngrok.app');
+    await enterField(tester, keyField, 'synthetic-draft-key');
     await tester.tap(find.byKey(const ValueKey('local-mac-show-key')));
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(keyField).obscureText, isFalse);
@@ -208,8 +284,8 @@ void main() {
     final session = LocalMacSession(probe: (_, __) async => throw const SocketException('unavailable'));
     await openPage(tester, session);
     final key = List.filled(43, 's').join();
-    await tester.enterText(find.byKey(const ValueKey('local-mac-address')), 'https://synthetic.ngrok.app');
-    await tester.enterText(find.byKey(const ValueKey('local-mac-key')), key);
+    await enterField(tester, find.byKey(const ValueKey('local-mac-address')), 'https://synthetic.ngrok.app');
+    await enterField(tester, find.byKey(const ValueKey('local-mac-key')), key);
     await tapFormButton(tester, 'local-mac-connect');
     expect(session.isSignedIn, isFalse);
     expect(find.byKey(const ValueKey('local-mac-result')), findsOneWidget);
@@ -255,7 +331,7 @@ void main() {
     expect(find.text('Connected'), findsOneWidget);
     final keyField = find.byKey(const ValueKey('local-mac-key'));
     await tester.ensureVisible(keyField);
-    await tester.enterText(keyField, 'edited-draft');
+    await enterField(tester, keyField, 'edited-draft');
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('local-mac-result')), findsNothing);
     expect(session.accessKey, key); // Editing does not switch the live origin/key.
@@ -267,8 +343,8 @@ void main() {
     var attempts = 0;
     final session = LocalMacSession(probe: (_, __) => ++attempts == 1 ? probe.future : Future.value({'uid': 'alice'}));
     await openPage(tester, session);
-    await tester.enterText(find.byKey(const ValueKey('local-mac-address')), 'https://synthetic.ngrok.app');
-    await tester.enterText(find.byKey(const ValueKey('local-mac-key')), List.filled(43, 's').join());
+    await enterField(tester, find.byKey(const ValueKey('local-mac-address')), 'https://synthetic.ngrok.app');
+    await enterField(tester, find.byKey(const ValueKey('local-mac-key')), List.filled(43, 's').join());
     final connect = find.byKey(const ValueKey('local-mac-connect'));
     await tester.ensureVisible(connect);
     await tester.pumpAndSettle();
@@ -307,8 +383,8 @@ void main() {
     await openPage(tester, LocalMacSession());
     final addressField = find.byKey(const ValueKey('local-mac-address'));
     final keyField = find.byKey(const ValueKey('local-mac-key'));
-    await tester.enterText(addressField, 'https://synthetic.ngrok.app');
-    await tester.enterText(keyField, ' pasted\nkey ');
+    await enterField(tester, addressField, 'https://synthetic.ngrok.app');
+    await enterField(tester, keyField, ' pasted\nkey ');
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(keyField).controller!.text, 'pastedkey');
     await tester.pumpWidget(const SizedBox());

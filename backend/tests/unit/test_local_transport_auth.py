@@ -16,8 +16,8 @@ from utils.offline_route_policy import OfflineRoutePolicyMiddleware
 KEY = "a" * 43
 
 
-@pytest.fixture
-def pairing(monkeypatch, tmp_path):
+@pytest.fixture(params=["ngrok", "tailscale"])
+def pairing(monkeypatch, tmp_path, request):
     path = tmp_path / "pairing.json"
     path.write_text(
         json.dumps(
@@ -26,7 +26,7 @@ def pairing(monkeypatch, tmp_path):
     )
     path.chmod(0o600)
     monkeypatch.setenv("OMI_ENV_STAGE", "offline")
-    monkeypatch.setenv("OMI_LOCAL_TRANSPORT", "ngrok")
+    monkeypatch.setenv("OMI_LOCAL_TRANSPORT", request.param)
     monkeypatch.setenv("OMI_LOCAL_PAIRING_FILE", str(path))
     return path
 
@@ -82,9 +82,10 @@ def test_rotation_revokes_previous_key_and_permissions_fail_closed(pairing):
         verify_local_key("b" * 43)
 
 
-def test_missing_configuration_blocks_startup(monkeypatch):
+@pytest.mark.parametrize("transport", ["ngrok", "tailscale"])
+def test_missing_configuration_blocks_startup(monkeypatch, transport):
     monkeypatch.setenv("OMI_ENV_STAGE", "offline")
-    monkeypatch.setenv("OMI_LOCAL_TRANSPORT", "ngrok")
+    monkeypatch.setenv("OMI_LOCAL_TRANSPORT", transport)
     monkeypatch.delenv("OMI_LOCAL_PAIRING_FILE", raising=False)
     with pytest.raises(LocalTransportAuthError):
         with client():
@@ -206,7 +207,7 @@ def run_probe():
         app.include_router(transcribe.router)
         app.add_middleware(OfflineRoutePolicyMiddleware)
         app.add_middleware(LocalTransportAuthMiddleware)
-        with TestClient(app, client=('127.0.0.1', 50000)) as client:
+        with TestClient(app, base_url='http://127.0.0.1:8000', client=('127.0.0.1', 50000)) as client:
             for headers in ({}, {'Authorization': 'Bearer wrong'}, {'Authorization': 'Basic ' + 'a' * 43}):
                 assert client.get('/v1/local/status', headers=headers).status_code == 401
                 assert client.get('/v1/local/preview', headers=headers).status_code == 401
@@ -224,7 +225,10 @@ def run_probe():
             assert preview.headers['cache-control'] == 'no-store'
             for forwarded in ('Forwarded', 'X-Forwarded-For', 'X-Forwarded-Proto'):
                 assert client.get('/v1/local/preview', headers={**headers, forwarded: 'synthetic-proxy'}).status_code == 404
-            with TestClient(app, client=('192.0.2.1', 50000)) as remote:
+            with TestClient(app, base_url='http://100.64.0.1:8000', client=('127.0.0.1', 50000)) as tailnet:
+                assert tailnet.get('/v1/local/preview', headers={**headers, 'Host': '127.0.0.1:8000'}).status_code == 404
+                assert tailnet.get('/v1/local/status', headers=headers).status_code == 200
+            with TestClient(app, base_url='http://127.0.0.1:8000', client=('192.0.2.1', 50000)) as remote:
                 assert remote.get('/v1/local/preview', headers=headers).status_code == 404
             app.dependency_overrides[auth.get_current_user_uid] = forbidden
             os.environ['OMI_LOCAL_TRANSPORT'] = 'lan'

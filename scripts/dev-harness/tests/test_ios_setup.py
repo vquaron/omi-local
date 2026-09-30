@@ -3,6 +3,7 @@ import json
 import os
 import pty
 import select
+import shlex
 import subprocess
 import sys
 import time
@@ -15,6 +16,126 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'scripts/dev-harness'))
 from dev_harness import ios_debug
+
+
+@pytest.mark.parametrize('existing_team', ['', 'ZZZZZZZZZZ'])
+def test_profile_reuses_saved_team_and_validates_identity(tmp_path, existing_team):
+    app = tmp_path / 'app'
+    config = app / 'ios/Flutter/PersonalTeam.xcconfig'
+    config.parent.mkdir(parents=True)
+    config.write_text('OMI_APPLE_TEAM_ID=ABCDEFGHIJ\n')
+    setup = app / 'setup.sh'
+    setup.write_text((ROOT / 'app/setup.sh').read_text())
+    result = subprocess.run(['bash', '-c', '''
+        source "$1"
+        check_ios_signing() { [[ "$OMI_APPLE_TEAM_ID" == "$EXPECTED_TEAM" ]]; }
+        prepare_ios_signing
+    ''', 'test', str(setup)], capture_output=True, text=True,
+        env={**os.environ, 'OMI_APPLE_TEAM_ID': existing_team,
+             'EXPECTED_TEAM': existing_team or 'ABCDEFGHIJ'})
+    assert result.returncode == 0, result.stderr
+    assert 'ABCDEFGHIJ' not in result.stdout + result.stderr
+    assert 'Team ID (' not in result.stdout + result.stderr
+
+
+def test_profile_missing_or_invalid_saved_team_still_requires_signing(tmp_path):
+    app = tmp_path / 'app'
+    config = app / 'ios/Flutter/PersonalTeam.xcconfig'
+    config.parent.mkdir(parents=True)
+    config.write_text('OMI_APPLE_TEAM_ID=not-a-team\n')
+    setup = app / 'setup.sh'
+    setup.write_text((ROOT / 'app/setup.sh').read_text())
+    result = subprocess.run(['bash', '-c', 'source "$1"; prepare_ios_signing', 'test', str(setup)],
+                            capture_output=True, text=True, env={**os.environ, 'OMI_APPLE_TEAM_ID': ''})
+    assert result.returncode != 0
+    assert 'OMI_APPLE_TEAM_ID' in result.stderr
+
+
+@pytest.mark.parametrize('sdk_installed', [True, False])
+def test_mac_launcher_finds_project_flutter_from_root_and_app(tmp_path, sdk_installed):
+    scripts = tmp_path / 'scripts'
+    scripts.mkdir()
+    helper = scripts / 'macos-runtime.sh'
+    helper.write_text((ROOT / 'scripts/macos-runtime.sh').read_text())
+    (tmp_path / 'app').mkdir()
+    fallback = tmp_path / 'fallback'
+    fallback.mkdir()
+    candidates = [(fallback / 'flutter', 'fallback')]
+    if sdk_installed:
+        candidates.append((tmp_path / '.local/toolchains/flutter/bin/flutter', 'project'))
+    for binary, output in candidates:
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_text('#!/bin/sh\necho ' + output + '\n')
+        binary.chmod(0o755)
+    result = subprocess.run(['bash', '-c', '''
+        source "$1"
+        omi_macos_path
+        flutter --version
+        cd app
+        omi_macos_path
+        flutter --version
+    ''', 'test', str(helper)], cwd=tmp_path, capture_output=True, text=True,
+        env={**os.environ, 'PATH': str(fallback) + os.pathsep + os.environ['PATH']})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ['project' if sdk_installed else 'fallback'] * 2
+
+
+@pytest.mark.parametrize('mode', ['personal', 'standard'])
+def test_generated_ats_scopes_tailscale_exception_to_personal_build(tmp_path, mode):
+    # Native tool seams only: execute the complete production generator on a
+    # temporary copy. The shim implements PlistBuddy's primitive plist edits.
+    shim = tmp_path / 'plist_tool.py'
+    shim.write_text('''
+import plistlib
+import shlex
+import sys
+
+with open(sys.argv[-1], 'rb') as source:
+    data = plistlib.load(source)
+if sys.argv[1] == '--lint':
+    sys.exit(0)
+operation, path, *arguments = shlex.split(sys.argv[2])
+parts = path.lstrip(':').split(':')
+parent = data
+try:
+    for part in parts[:-1]:
+        parent = parent[int(part)] if isinstance(parent, list) else parent[part]
+    key = int(parts[-1]) if isinstance(parent, list) else parts[-1]
+    if operation == 'Delete':
+        del parent[key]
+    elif operation == 'Add':
+        kind, *values = arguments
+        value = {'dict': lambda: {}, 'array': lambda: [],
+                 'bool': lambda: values[0] == 'true',
+                 'string': lambda: ' '.join(values)}[kind]()
+        if isinstance(parent, list):
+            parent.insert(key, value)
+        else:
+            if key in parent:
+                sys.exit(1)
+            parent[key] = value
+    else:
+        raise ValueError(operation)
+except (KeyError, IndexError):
+    sys.exit(1)
+with open(sys.argv[-1], 'wb') as output:
+    plistlib.dump(data, output)
+''')
+    command = f'{shlex.quote(sys.executable)} {shlex.quote(str(shim))}'
+    generator = tmp_path / 'generate.sh'
+    generator.write_text((ROOT / 'app/scripts/generate_ios_dev_info_plist.sh').read_text()
+                         .replace('/usr/libexec/PlistBuddy', command)
+                         .replace('plutil -lint', f'{command} --lint'))
+    output = tmp_path / 'Info.plist'
+    subprocess.run(['bash', str(generator), str(ROOT / 'app/ios/Runner/Info.plist'), str(output), mode],
+                   check=True, capture_output=True, text=True)
+    ats = plistlib.loads(output.read_bytes())['NSAppTransportSecurity']
+    expected = {'NSAllowsLocalNetworking': True}
+    if mode == 'personal':
+        # Apple's IP/CIDR ATS support starts at iOS 17; no arbitrary-load bypass.
+        # https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsexceptiondomains
+        expected['NSExceptionDomains'] = {'100.64.0.0/10': {'NSExceptionAllowsInsecureHTTPLoads': True}}
+    assert ats == expected
 
 
 @pytest.fixture
@@ -206,7 +327,7 @@ def test_interactive_wait_rechecks_each_stage_and_can_cancel(ios, cancel):
         os.close(master)
 
 
-def test_check_only_entry_does_not_build_or_generate_config(ios):
+def test_retired_finder_check_option_fails_without_building_or_generating_config(ios):
     root, _, _ = ios
     checkout = root / 'clean checkout'
     for name in ['start.command', 'app/setup.sh', 'app/pubspec.yaml', 'scripts/macos-runtime.sh']:
@@ -220,8 +341,8 @@ def test_check_only_entry_does_not_build_or_generate_config(ios):
         target.write_text('source input')
     before = {p: p.read_bytes() for p in checkout.rglob('*') if p.is_file()}
     result = run(ios, mode='check-entry', TEST_ENTRY_ROOT=str(checkout))
-    assert result.returncode == 0, result.stderr
-    assert 'Сборка и установка не запускались' in result.stdout
+    assert result.returncode == 2
+    assert 'Run ./omiloc --help' in result.stderr
     assert 'TEST-PHONE' not in result.stdout + result.stderr
     assert {p: p.read_bytes() for p in checkout.rglob('*') if p.is_file()} == before
 
@@ -467,7 +588,7 @@ def test_unified_iphone_detects_legacy_session_without_exposing_arguments(tmp_pa
     monkeypatch.setattr(ios_launcher.subprocess, 'run', lambda *a, **k: pytest.fail('Started a duplicate'))
     assert ios_launcher.launch(tmp_path, 'debug', lock_path=tmp_path / 'lock') == 0
     output = capsys.readouterr().out
-    assert 'уже работает' in output
+    assert 'already running' in output
     assert 'PRIVATE-DEVICE' not in output
 
 

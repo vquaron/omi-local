@@ -10807,12 +10807,13 @@
     "conversationsNotCapturedCount": "రికార్డ్ కాలేదు ({count})",
     "transcriptionNoAudio": "ట్రాన్స్‌క్రిప్షన్ ఆడియో స్వీకరించడం లేదు",
     "localMacTitle": "Local Mac",
-    "localMacAddress": "HTTPS address",
+    "localMacAddress": "Tailscale IP / HTTPS",
     "localMacAccessKey": "App access key",
     "localMacConnect": "Check and connect",
     "localMacKeyRejected": "The access key was rejected. Check the key on your Mac.",
     "localMacConnectionFailed": "Could not connect. Check the address and that your Mac and tunnel are running.",
-    "localMacHelp": "Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.",
+    "localMacHelp": "Tailscale IP (లేదా IP:పోర్ట్) లేదా ngrok HTTPS చిరునామా మరియు యాప్ కీని నమోదు చేయండి. కనెక్ట్ చేయడం రికార్డింగ్‌ను ఆపుతుంది. ఆడియో మీ సర్వర్‌లో ఉంటుంది.",
     "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
-    "tapPlusToStartRecording": "Tap + to start recording"
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "localMacServers": "సేవ్ చేసిన సర్వర్లు"
 }

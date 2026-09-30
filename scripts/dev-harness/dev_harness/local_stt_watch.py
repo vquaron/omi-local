@@ -60,7 +60,7 @@ def worker_ready(cfg) -> bool:
 
 
 def preflight(cfg) -> None:
-    if cfg.provider_mode != 'offline' or cfg.local_transport != 'ngrok':
+    if cfg.provider_mode != 'offline' or cfg.local_transport not in config.PAIRED_TRANSPORTS:
         raise local_stt.TranscriptionError('Use the paired local Mac offline stack')
     safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
     engine = local_stt.EngineConfig.load(cfg)
@@ -231,7 +231,7 @@ def main() -> int:
     try:
         cfg = config.load_config(Path.cwd())
         safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
-        if cfg.provider_mode != 'offline' or cfg.local_transport != 'ngrok' or not settings(cfg)['enabled']:
+        if cfg.provider_mode != 'offline' or cfg.local_transport not in config.PAIRED_TRANSPORTS or not settings(cfg)['enabled']:
             raise local_stt.TranscriptionError('Automatic transcription is not enabled for this local stack')
         # The held readiness lock must follow validation in the actual child.
         local_stt.check_model(local_stt.EngineConfig.load(cfg))

@@ -36,8 +36,28 @@ abstract class Env {
   static bool localTunnelConfigured = false;
   static bool get usesLocalTunnel => isOfflineRuntime && localTunnelConfigured;
 
+  static bool isTailscaleIpv4(String host) {
+    final parts = host.split('.');
+    if (parts.length != 4) return false;
+    final octets = <int>[];
+    for (final part in parts) {
+      final octet = int.tryParse(part);
+      if (octet == null || octet < 0 || octet > 255 || part != octet.toString()) return false;
+      octets.add(octet);
+    }
+    return octets[0] == 100 && octets[1] >= 64 && octets[1] <= 127;
+  }
+
   static Uri parseLocalTunnelUrl(String value) {
-    final uri = Uri.tryParse(value.trim());
+    final address = value.trim();
+    final tailscale = RegExp(r'^(?:http://)?([0-9.]+)(?::([0-9]+))?/?$').firstMatch(address);
+    if (tailscale != null && isTailscaleIpv4(tailscale[1]!)) {
+      final port = tailscale[2] == null ? (address.startsWith('http://') ? 80 : 20000) : int.tryParse(tailscale[2]!);
+      if (port != null && port > 0 && port <= 65535) {
+        return Uri(scheme: 'http', host: tailscale[1], port: port, path: '/');
+      }
+    }
+    final uri = Uri.tryParse(address);
     if (uri == null ||
         uri.scheme != 'https' ||
         uri.host.isEmpty ||
@@ -48,7 +68,7 @@ abstract class Env {
         uri.hasFragment ||
         (uri.path.isNotEmpty && uri.path != '/') ||
         isPrivateOrLoopbackHost(uri.host)) {
-      throw const FormatException('Enter an HTTPS server address without a path or credentials.');
+      throw const FormatException('Enter a Tailscale IPv4 address with an optional port, or an HTTPS server address.');
     }
     return Uri(scheme: 'https', host: uri.host.toLowerCase(), path: '/');
   }

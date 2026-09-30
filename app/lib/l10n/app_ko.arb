@@ -3241,12 +3241,13 @@
     "conversationsNotCapturedCount": "기록되지 않음 ({count})",
     "transcriptionNoAudio": "전사가 오디오를 받지 못하고 있습니다",
     "localMacTitle": "Local Mac",
-    "localMacAddress": "HTTPS address",
+    "localMacAddress": "Tailscale IP / HTTPS",
     "localMacAccessKey": "App access key",
     "localMacConnect": "Check and connect",
     "localMacKeyRejected": "The access key was rejected. Check the key on your Mac.",
     "localMacConnectionFailed": "Could not connect. Check the address and that your Mac and tunnel are running.",
-    "localMacHelp": "Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.",
+    "localMacHelp": "Tailscale IP(또는 IP:포트)나 ngrok HTTPS 주소와 앱 키를 입력하세요. 연결하면 녹음이 중지됩니다. 오디오는 서버에 저장됩니다.",
     "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
-    "tapPlusToStartRecording": "Tap + to start recording"
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "localMacServers": "저장된 서버"
 }

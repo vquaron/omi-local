@@ -558,3 +558,128 @@ def test_down_reaps_a_detached_child_still_holding_the_service_port(
                 os.kill(pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
+
+
+def _tailscale_config(tmp_path, **change):
+    return config.load_config(REPO_ROOT, env={
+        'PROVIDER_MODE': 'offline', 'OMI_LOCAL_TRANSPORT': 'tailscale',
+        'OMI_TAILSCALE_IP': '100.64.0.1', 'OMI_LOCAL_STATE_ROOT': str(tmp_path), **change,
+    }, create_layout=True)
+
+
+def test_tailscale_launcher_keeps_emulators_loopback_and_ip_out_of_commands(monkeypatch, tmp_path):
+    cfg = _tailscale_config(tmp_path)
+    command = cli._firebase_command(cfg)
+    payload = json.loads(Path(command[command.index('--config') + 1]).read_text())
+    for service in ('firestore', 'auth', 'hub', 'logging'):
+        assert payload['emulators'][service]['host'] == '127.0.0.1'
+    assert payload['emulators']['ui']['enabled'] is False
+    started = []
+    monkeypatch.setattr(cli, '_start_process', lambda *args, **kwargs: started.append((args, kwargs)))
+    cli._start_app_services(cfg)
+    assert len(started) == 1
+    args, kwargs = started[0]
+    assert args[1] == 'backend' and args[2][-1] == 'dev_harness.tailscale_backend'
+    assert cfg.tailscale_ip not in ' '.join(args[2])
+    assert kwargs['env']['OMI_TAILSCALE_IP'] == cfg.tailscale_ip
+    assert kwargs['env']['OMI_DEV_BIND_HOST'] == '127.0.0.1'
+
+
+def test_native_tailscale_launcher_requires_verified_interface(monkeypatch, tmp_path):
+    cfg = _tailscale_config(tmp_path, OMI_TAILSCALE_IP='')
+    def forbidden(*args, **kwargs):
+        raise AssertionError('missing interface must not launch a loopback-only native backend')
+    monkeypatch.setattr(cli, '_start_process', forbidden)
+    with pytest.raises(ValueError, match='listener configuration'):
+        cli._start_app_services(cfg)
+
+
+def test_tailscale_interface_change_invalidates_backend_reuse_without_persisting_ip(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    cfg = _tailscale_config(tmp_path)
+    old = {'service': 'backend', 'local_transport': 'tailscale', 'tailscale_interface_digest': 'old'}
+    stopped, saved = [], []
+    monkeypatch.setattr(cli, '_service_record', lambda *args: old)
+    monkeypatch.setattr(cli, '_service_health', lambda *args: (True, 'ready'))
+    monkeypatch.setattr(cli, '_stop_single_service', lambda *args: stopped.append(args[1]))
+    monkeypatch.setattr(cli, '_require_port_available_or_owned', lambda *args: None)
+    monkeypatch.setattr(cli, '_process_records', lambda *args: [])
+    monkeypatch.setattr(cli, '_save_manifests', lambda cfg, records: saved.extend(records))
+    monkeypatch.setattr(cli.subprocess, 'Popen', lambda *args, **kwargs: SimpleNamespace(pid=9876))
+    cli._start_process(cfg, 'backend', ['runner'], cwd=cfg.repo_root,
+                       log_name='backend.log', port=cfg.backend_port, env={})
+    assert stopped == [old]
+    assert saved[0]['tailscale_interface_digest'] == cli._tailscale_interface_digest(cfg)
+    assert cfg.tailscale_ip not in json.dumps(saved)
+
+
+def test_tailscale_health_requires_second_listener(monkeypatch, tmp_path):
+    cfg = _tailscale_config(tmp_path)
+    monkeypatch.setattr(cli, '_http_ok', lambda *args: (True, 'loopback ready'))
+    class Unavailable:
+        def open(self, *args, **kwargs):
+            raise OSError('private interface error')
+    monkeypatch.setattr(cli.urllib.request, 'build_opener', lambda *args: Unavailable())
+    ready, detail = cli._service_health(cfg, 'backend')
+    assert not ready and detail == 'Tailscale listener unavailable'
+    assert 'private interface' not in detail
+
+
+def test_tailscale_stops_old_ngrok_and_preserves_owned_local_providers(monkeypatch, tmp_path):
+    cfg = _tailscale_config(tmp_path)
+    records = [{'service': name} for name in ('backend', 'ngrok', 'library', 'live-stt', 'stt-worker')]
+    stopped = []
+    monkeypatch.setattr(cli, '_process_records', lambda cfg: records)
+    monkeypatch.setattr(cli, '_stop_single_service', lambda cfg, record: stopped.append(record['service']))
+    cli._stop_unused_offline_services(cfg)
+    assert stopped == ['ngrok']
+
+
+@pytest.mark.parametrize('available', [False, True])
+def test_provider_restart_resolves_native_interface_before_stopping(monkeypatch, tmp_path, available):
+    import httpx
+    from dev_harness import local_env, local_stt_services as services, local_transport
+    cfg = _tailscale_config(tmp_path, OMI_TAILSCALE_IP='')
+    events, started = [], []
+    def resolve(value):
+        assert value == ''
+        events.append('resolve')
+        if not available:
+            raise local_transport.TransportError('Tailscale is unavailable')
+        return '100.64.0.2'
+    monkeypatch.setattr(local_transport, 'tailscale_ip', resolve)
+    monkeypatch.setattr(local_env, 'read_env', lambda _: {'OMI_LOCAL_APP_KEY': 'synthetic'})
+    client = httpx.Client
+    monkeypatch.setattr(services.httpx, 'Client', lambda **kwargs: client(
+        transport=httpx.MockTransport(lambda req: httpx.Response(200, json={'capture': {'state': 'idle'}})), **kwargs))
+    monkeypatch.setattr(services, 'start_configured', lambda cfg: None)
+    monkeypatch.setattr(cli, '_service_record', lambda *args: {'service': 'backend'})
+    monkeypatch.setattr(cli, '_stop_single_service', lambda *args: events.append('stop'))
+    monkeypatch.setattr(cli, '_start_app_services', lambda cfg: started.append(cfg))
+    monkeypatch.setattr(cli, '_service_health', lambda *args: (True, 'ready'))
+    if available:
+        services.apply(cfg)
+        assert events == ['resolve', 'stop']
+        assert started[0].tailscale_ip == '100.64.0.2' and cfg.tailscale_ip == ''
+    else:
+        with pytest.raises(local_transport.TransportError):
+            services.apply(cfg)
+        assert events == ['resolve'] and not started
+
+
+def test_container_provider_restart_retains_loopback_launcher(monkeypatch, tmp_path):
+    from dev_harness import local_transport
+    cfg = _tailscale_config(tmp_path, OMI_CONTAINER_RUNTIME='1')
+    def forbidden(*args):
+        raise AssertionError('container must not resolve the native Tailscale interface')
+    monkeypatch.setattr(local_transport, 'tailscale_ip', forbidden)
+    assert cfg.container_runtime and cfg.tailscale_ip == ''
+    assert cli.backend_restart_config(cfg) is cfg
+    starts = []
+    monkeypatch.setattr(cli, '_start_process', lambda *args, **kwargs: starts.append((args, kwargs)))
+    cli._start_app_services(cfg)
+    args, kwargs = starts[0]
+    assert 'uvicorn' in args[2] and args[2][args[2].index('--host') + 1] == '127.0.0.1'
+    assert '--no-proxy-headers' in args[2]
+    assert kwargs['env']['OMI_CONTAINER_RUNTIME'] == '1'
+    assert 'OMI_TAILSCALE_IP' not in kwargs['env']

@@ -27,7 +27,7 @@ final class OfflineNetworkPolicy {
   factory OfflineNetworkPolicy.tunnel(Uri uri) {
     final api = Env.parseLocalTunnelUrl(uri.toString());
     return OfflineNetworkPolicy._(offline: true, authorities: {
-      _AllowedAuthority(api.host, 443, secure: true, webSocketAllowed: true),
+      _AllowedAuthority(api.host, api.port, secure: api.scheme == 'https', webSocketAllowed: true),
     });
   }
 

@@ -3337,12 +3337,13 @@
     "conversationsNotCapturedCount": "Nincs rögzítve ({count})",
     "transcriptionNoAudio": "Az átírás nem kap hangot",
     "localMacTitle": "Local Mac",
-    "localMacAddress": "HTTPS address",
+    "localMacAddress": "Tailscale IP / HTTPS",
     "localMacAccessKey": "App access key",
     "localMacConnect": "Check and connect",
     "localMacKeyRejected": "The access key was rejected. Check the key on your Mac.",
     "localMacConnectionFailed": "Could not connect. Check the address and that your Mac and tunnel are running.",
-    "localMacHelp": "Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.",
+    "localMacHelp": "Add meg a Tailscale IP-címet (vagy IP:portot) vagy az ngrok HTTPS-címét és az alkalmazáskulcsot. A csatlakozás leállítja a felvételt. A hang a szervereden marad.",
     "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
-    "tapPlusToStartRecording": "Tap + to start recording"
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "localMacServers": "Mentett szerverek"
 }

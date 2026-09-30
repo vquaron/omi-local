@@ -1,0 +1,9 @@
+# Host Tailscale owns the VPN; no tailscaled or ngrok runs inside the containers.
+# docker.sh verifies this address belongs to the connected Docker host.
+services:
+  app:
+    environment:
+      OMI_LOCAL_TRANSPORT: tailscale
+  ingress:
+    ports:
+      - '${OMI_TAILSCALE_IP:?Run omiloc --runtime docker up with a connected host Tailscale}:21000:22000'

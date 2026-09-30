@@ -28,10 +28,12 @@ def test_start_stops_at_first_failed_precondition(monkeypatch):
     assert events == []
 
 
-def test_start_uses_existing_lifecycle_and_prints_short_result(monkeypatch):
+@pytest.mark.parametrize('operation', ['bootstrap', 'up'])
+def test_bootstrap_and_start_have_separate_effects(monkeypatch, tmp_path, operation):
     output, events = Terminal(), []
-    cfg = SimpleNamespace(repo_root=Path('.'), backend_port=20000)
-    monkeypatch.setattr(local_setup.sys, 'stdin', Terminal())
+    (tmp_path / 'pairing.json').write_text('{}')
+    cfg = SimpleNamespace(repo_root=tmp_path, backend_port=20000,
+                          layout=SimpleNamespace(state_root=tmp_path))
     monkeypatch.setattr(local_setup.sys, 'stdout', output)
     monkeypatch.setattr(local_setup, 'check', lambda _, **kwargs: events.append('check'))
     monkeypatch.setattr(local_setup.local_live, 'require_backend_environment', lambda _: None)
@@ -39,28 +41,27 @@ def test_start_uses_existing_lifecycle_and_prints_short_result(monkeypatch):
     monkeypatch.setattr(local_setup.local_transcription, 'prepare', lambda _: events.append('prepare'))
     monkeypatch.setattr(local_setup.local_transcription, 'configure_defaults', lambda _: events.append('defaults'))
     monkeypatch.setattr(local_setup, 'require_transcription_ready', lambda _: events.append('ready'))
-    monkeypatch.setattr(local_setup.local_live, 'selected_endpoint', lambda _: 'ws://127.0.0.1:18090/asr')
     monkeypatch.setattr(local_setup.local_launcher, 'install', lambda _: events.append('install'))
     monkeypatch.setattr(local_setup.config, 'load_config', lambda *a, **k: cfg)
     monkeypatch.setattr(local_mac, 'configure', lambda _: events.append('configure'))
     monkeypatch.setattr(local_mac, 'up', lambda _: events.append('up') or 0)
     monkeypatch.setattr(local_setup.local_library, 'start', lambda _: events.append('library'))
-    monkeypatch.setattr(local_setup.local_stt_watch, 'worker_ready', lambda _: True)
-    monkeypatch.setattr(local_setup.webbrowser, 'open', lambda _: events.append('open'))
-    assert local_setup.run(cfg) == 0
-    assert events == ['check', 'prepare', 'install', 'defaults', 'configure', 'up', 'ready', 'library', 'open']
-    assert 'http://127.0.0.1:20001' in output.getvalue()
-    assert '┌' in output.getvalue() and 'Терминал можно закрыть' in output.getvalue()
-    assert '│  omiloc' in output.getvalue()
-    assert 'Приложение на iPhone: docs/LOCAL_SETUP.md' in output.getvalue()
-    assert 'Live-транскрипция готова.' in output.getvalue()
+    monkeypatch.setattr(local_setup.webbrowser, 'open', lambda _: pytest.fail('browser must be explicit'))
+    if operation == 'bootstrap':
+        assert local_setup.bootstrap(cfg) == 0
+        assert events == ['check', 'prepare', 'defaults', 'configure', 'install']
+    else:
+        assert local_setup.run(cfg) == 0
+        assert events == ['check', 'up', 'ready', 'library']
+        assert 'http://127.0.0.1:20001' in output.getvalue()
+        assert 'Native services ready' in output.getvalue()
     assert len(output.getvalue().splitlines()) < 20
 
 
-def test_start_refuses_noninteractive_secret_output(monkeypatch):
+def test_pair_refuses_noninteractive_secret_output(monkeypatch):
     monkeypatch.setattr(local_setup.sys, 'stdin', io.StringIO())
-    with pytest.raises(local_setup.SetupError, match='Terminal'):
-        local_setup.run(SimpleNamespace())
+    with pytest.raises(local_setup.SetupError, match='interactive terminal'):
+        local_setup.pair(SimpleNamespace())
 
 
 def test_setup_does_not_open_library_or_claim_success_when_live_is_unavailable(monkeypatch, tmp_path):
@@ -68,6 +69,7 @@ def test_setup_does_not_open_library_or_claim_success_when_live_is_unavailable(m
 
     cfg = config.load_config(tmp_path, {'PROVIDER_MODE': 'offline', 'OMI_LOCAL_TRANSPORT': 'ngrok',
                                        'OMI_DEV_BIND_HOST': '127.0.0.1'}, create_layout=True)
+    (cfg.layout.state_root / 'pairing.json').write_text('{}')
     output = Terminal()
     monkeypatch.setattr(local_setup.sys, 'stdin', Terminal())
     monkeypatch.setattr(local_setup.sys, 'stdout', output)
@@ -85,7 +87,7 @@ def test_setup_does_not_open_library_or_claim_success_when_live_is_unavailable(m
     monkeypatch.setattr(local_setup.webbrowser, 'open', lambda _: pytest.fail('cannot open successful setup'))
     with pytest.raises(local_setup.local_live.LocalLiveError, match='not ready'):
         local_setup.run(cfg)
-    assert 'Сервисы Mac запущены' not in output.getvalue()
+    assert 'Native services ready' not in output.getvalue()
 
 
 def test_first_pairing_shows_box_once_and_repeat_preserves_hash(monkeypatch, tmp_path):
@@ -106,7 +108,7 @@ def test_first_pairing_shows_box_once_and_repeat_preserves_hash(monkeypatch, tmp
     local_mac.configure(cfg)
     assert (tmp_path / 'pairing.json').read_bytes() == saved
     assert 'x' * 43 not in output.getvalue()
-    assert 'Домен: https://example.ngrok.app' in output.getvalue()
+    assert 'Address: https://example.ngrok.app' in output.getvalue()
 
 
 @pytest.mark.parametrize('system, architecture, translated, accepted, reexec', [
@@ -190,10 +192,10 @@ def test_quiet_installer_keeps_private_log_and_stops_on_failure(tmp_path, failed
     assert 'dependency-diagnostic' not in result.stdout + result.stderr
     assert len((result.stdout + result.stderr).splitlines()) <= 4
     if failed:
-        assert 'Не удалось: подготовить Python' in result.stderr
+        assert 'Failed: prepare Python' in result.stderr
         assert '.local/install.log' in result.stderr
     else:
-        assert 'Проверяем готовность сервисов Mac' in result.stdout
+        assert 'Checking native service prerequisites' in result.stdout
         assert not result.stderr
     log = repo / '.local/install.log'
     assert log.stat().st_mode & 0o777 == 0o600

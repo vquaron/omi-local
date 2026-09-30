@@ -10807,12 +10807,13 @@
     "conversationsNotCapturedCount": "பதிவு செய்யப்படவில்லை ({count})",
     "transcriptionNoAudio": "நகலெடுப்பு ஆடியோவைப் பெறவில்லை",
     "localMacTitle": "Local Mac",
-    "localMacAddress": "HTTPS address",
+    "localMacAddress": "Tailscale IP / HTTPS",
     "localMacAccessKey": "App access key",
     "localMacConnect": "Check and connect",
     "localMacKeyRejected": "The access key was rejected. Check the key on your Mac.",
     "localMacConnectionFailed": "Could not connect. Check the address and that your Mac and tunnel are running.",
-    "localMacHelp": "Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.",
+    "localMacHelp": "Tailscale IP (அல்லது IP:போர்ட்) அல்லது ngrok HTTPS முகவரி மற்றும் செயலி விசையை உள்ளிடவும். இணைப்பது பதிவை நிறுத்தும். ஒலி உங்கள் சேவையகத்தில் இருக்கும்.",
     "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
-    "tapPlusToStartRecording": "Tap + to start recording"
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "localMacServers": "சேமித்த சேவையகங்கள்"
 }

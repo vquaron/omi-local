@@ -6,7 +6,7 @@ import os
 import ctypes.util
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
@@ -55,6 +55,7 @@ PORT_OVERRIDE_ENVS = {
     "llm_gateway": "OMI_HARNESS_LLM_GATEWAY_PORT",
 }
 PROVIDER_MODES = providers.PROVIDER_MODES
+PAIRED_TRANSPORTS = frozenset({"ngrok", "tailscale"})
 CORE_PROVIDER_ENV = (
     "OPENAI_API_KEY",
     "DEEPGRAM_API_KEY",
@@ -130,6 +131,8 @@ class HarnessConfig:
     dev_bind_host: str = "127.0.0.1"
     llm_gateway_port: int = LLM_GATEWAY_PORT
     local_transport: str = "lan"
+    tailscale_ip: str = field(default="", repr=False)
+    container_runtime: bool = False
 
     @property
     def firestore_host(self) -> str:
@@ -332,11 +335,15 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
     )
     ports = harness_ports_from_env(source)
     dev_bind_host = dev_bind_host_from_env(source)
+    container_flag = source.get("OMI_CONTAINER_RUNTIME", "0")
+    if container_flag not in {"0", "1"}:
+        raise safety.SafetyError("OMI_CONTAINER_RUNTIME must be 0 or 1")
+    container_runtime = container_flag == "1"
     local_transport = source.get("OMI_LOCAL_TRANSPORT", "lan")
-    if local_transport not in {"lan", "ngrok"}:
+    if local_transport not in {"lan", *PAIRED_TRANSPORTS}:
         raise safety.SafetyError("Invalid local transport")
-    if local_transport == "ngrok" and (provider_mode != "offline" or dev_bind_host != "127.0.0.1"):
-        raise safety.SafetyError("ngrok requires offline providers and loopback binding")
+    if local_transport in PAIRED_TRANSPORTS and (provider_mode != "offline" or dev_bind_host != "127.0.0.1"):
+        raise safety.SafetyError("Paired local transport requires offline providers and loopback binding")
     cfg = HarnessConfig(
         repo_root=repo_root.resolve(),
         instance=instance,
@@ -351,6 +358,8 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
         llm_gateway_port=ports["llm_gateway"],
         dev_bind_host=dev_bind_host,
         local_transport=local_transport,
+        tailscale_ip=source.get("OMI_TAILSCALE_IP", "") if local_transport == "tailscale" and not container_runtime else "",
+        container_runtime=container_runtime,
     )
     parsed = parse_secrets_file(cfg)
     if parsed.secrets.get("PROVIDER_MODE"):
@@ -369,9 +378,11 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
             llm_gateway_port=cfg.llm_gateway_port,
             dev_bind_host=cfg.dev_bind_host,
             local_transport=cfg.local_transport,
+            tailscale_ip=cfg.tailscale_ip,
+            container_runtime=cfg.container_runtime,
         )
-    if cfg.local_transport == "ngrok" and cfg.provider_mode != "offline":
-        raise safety.SafetyError("ngrok requires offline providers after loading environment files")
+    if cfg.local_transport in PAIRED_TRANSPORTS and cfg.provider_mode != "offline":
+        raise safety.SafetyError("Paired local transport requires offline providers after loading environment files")
     safety.validate_harness_runtime_config(
         project_id=cfg.project_id,
         database_id=cfg.database_id,
@@ -387,6 +398,7 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
     gateway_feature_mode = "off" if cfg.provider_mode == "offline" else "gateway"
     extra = {
         "OMI_HARNESS_INSTANCE": cfg.instance,
+        "OMI_CONTAINER_RUNTIME": "1" if cfg.container_runtime else "0",
         "OMI_HARNESS_STATE_ROOT": str(cfg.layout.state_root),
         "OMI_LOCAL_STORAGE_ROOT": str(cfg.layout.services_dir / "storage"),
         "OMI_LOCAL_STORAGE_BASE_URL": f"{cfg.backend_url}/_local/storage",
@@ -412,7 +424,7 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
     if cfg.provider_mode == "offline":
         extra["OMI_OFFLINE_ALLOWED_ENDPOINTS"] = f"{cfg.dev_bind_host}:{cfg.backend_port}"
     extra["OMI_LOCAL_TRANSPORT"] = cfg.local_transport
-    if cfg.local_transport == "ngrok":
+    if cfg.local_transport in PAIRED_TRANSPORTS:
         from . import local_live
 
         extra["OMI_LOCAL_PAIRING_FILE"] = str(cfg.layout.state_root / "pairing.json")
@@ -448,6 +460,7 @@ def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     if cfg.provider_mode != "offline":
         extra.update(provider_secrets_from_file(cfg))
     env = safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
+    env.pop("OMI_TAILSCALE_IP", None)  # Only the native backend launcher receives this interface.
     _add_native_opus_path(env)
     return env
 
@@ -464,5 +477,6 @@ def desktop_backend_child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     env = safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
     if cfg.provider_mode == "offline":
         env["OMI_LLM_STUB"] = "1"
+    env.pop("OMI_TAILSCALE_IP", None)  # Only the native backend launcher receives this interface.
     _add_native_opus_path(env)
     return env

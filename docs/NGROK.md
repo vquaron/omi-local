@@ -1,5 +1,8 @@
 # Connecting an iPhone to your Mac
 
+For direct IP connection without ngrok, use [Tailscale](TAILSCALE.md).
+Set `OMI_LOCAL_TRANSPORT=ngrok` to choose this optional transport.
+
 Ngrok gives the Mac a persistent HTTPS address that the phone can reach,
 including over a mobile network. Audio passes through ngrok and is saved on the Mac.
 The web library opens separately and is accessible only on the Mac itself.

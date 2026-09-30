@@ -12,6 +12,7 @@ from fastapi import HTTPException, Request
 
 from routers.listen import registry
 from utils.env_loader import is_offline_runtime
+from utils.local_transport_auth import local_tunnel_enabled
 from utils.http_client import get_local_preview_client, get_local_preview_semaphore
 from utils.local_live_preview import preview_url
 from utils.offline_audio_capture import OUTPUT_CHANNELS, OUTPUT_SAMPLE_RATE, OUTPUT_SAMPLE_WIDTH_BYTES
@@ -19,14 +20,16 @@ from utils.offline_network_policy import OfflineEgressBlocked
 
 
 def require_local_status() -> None:
-    if not is_offline_runtime() or os.environ.get('OMI_LOCAL_TRANSPORT') != 'ngrok':
+    if not is_offline_runtime() or not local_tunnel_enabled():
         raise HTTPException(status_code=404, detail='Local status is unavailable')
 
 
 def require_local_preview(request: Request) -> None:
     """Draft text is readable by the authenticated loopback library only."""
     require_local_status()
-    if (request.client is None or request.client.host not in {'127.0.0.1', '::1'}
+    server = request.scope.get('server')
+    if (not server or server[0] not in {'127.0.0.1', '::1'}
+            or request.client is None or request.client.host not in {'127.0.0.1', '::1'}
             or any(name == 'forwarded' or name.startswith('x-forwarded-') for name in request.headers)):
         raise HTTPException(status_code=404, detail='Local preview is unavailable')
 

@@ -10807,12 +10807,13 @@
     "conversationsNotCapturedCount": "ದಾಖಲಾಗಿಲ್ಲ ({count})",
     "transcriptionNoAudio": "ಲಿಪ್ಯಂತರಣ ಆಡಿಯೊ ಸ್ವೀಕರಿಸುತ್ತಿಲ್ಲ",
     "localMacTitle": "Local Mac",
-    "localMacAddress": "HTTPS address",
+    "localMacAddress": "Tailscale IP / HTTPS",
     "localMacAccessKey": "App access key",
     "localMacConnect": "Check and connect",
     "localMacKeyRejected": "The access key was rejected. Check the key on your Mac.",
     "localMacConnectionFailed": "Could not connect. Check the address and that your Mac and tunnel are running.",
-    "localMacHelp": "Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.",
+    "localMacHelp": "Tailscale IP (ಅಥವಾ IP:ಪೋರ್ಟ್) ಅಥವಾ ngrok HTTPS ವಿಳಾಸ ಮತ್ತು ಅಪ್ಲಿಕೇಶನ್ ಕೀಲಿಯನ್ನು ನಮೂದಿಸಿ. ಸಂಪರ್ಕಿಸಿದಾಗ ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲುತ್ತದೆ. ಆಡಿಯೊ ನಿಮ್ಮ ಸರ್ವರ್‌ನಲ್ಲಿ ಉಳಿಯುತ್ತದೆ.",
     "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
-    "tapPlusToStartRecording": "Tap + to start recording"
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "localMacServers": "ಉಳಿಸಿದ ಸರ್ವರ್‌ಗಳು"
 }

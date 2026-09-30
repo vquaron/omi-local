@@ -26,6 +26,25 @@ void main() {
     expect(ConnectivityService.hasTunnelTransport([ConnectivityResult.none]), isFalse);
   });
 
+  test('Tailscale policy confines HTTP and WS to the paired address and port', () {
+    final tunnel = OfflineNetworkPolicy.tunnel(Uri.parse('http://100.64.0.1:21000/'));
+    expect(tunnel.allows(Uri.parse('http://100.64.0.1:21000/v1/health')), isTrue);
+    expect(tunnel.allows(Uri.parse('ws://100.64.0.1:21000/v4/listen')), isTrue);
+    for (final address in [
+      'http://100.64.0.2:21000/',
+      'http://100.64.0.1:20000/',
+      'http://100.64.0.1/',
+      'http://100.64.0.1:0/',
+      'https://100.64.0.1:21000/',
+      'wss://100.64.0.1:21000/',
+      'http://100.64.0.1:9099/',
+      'http://127.0.0.1:9099/',
+      'http://key@100.64.0.1:21000/',
+    ]) {
+      expect(tunnel.allows(Uri.parse(address)), isFalse, reason: address);
+    }
+  });
+
   test('offline policy permits only the configured API and Auth authorities', () {
     expect(policy.allows(Uri.parse('http://192.168.40.8:8000/v1/health')), isTrue);
     expect(policy.allows(Uri.parse('ws://192.168.40.8:8000/v4/listen')), isTrue);

@@ -54,6 +54,15 @@ def select_iphone(require_unlocked=True):
 
 def launch(env_file, app):
     values = read_env(env_file)
+    from .local_transport import normalize_tailscale_url, tailscale_ip
+    if values['OMI_LOCAL_TRANSPORT'] == 'tailscale':
+        ip = tailscale_ip(values.get('OMI_TAILSCALE_IP', ''))
+        port = int(os.environ.get('OMI_HARNESS_BACKEND_PORT') or 8000 + int(os.environ.get('OMI_HARNESS_PORT_OFFSET', '12000')))
+        url = normalize_tailscale_url(ip, port)
+    else:
+        url = values['OMI_NGROK_URL']
+    if not values.get('OMI_LOCAL_APP_KEY'):
+        raise LocalEnvError('Set the existing app key in .env to configure the phone automatically')
     app = Path(app)
     capture(['codesign', '--verify', '--deep', '--strict', str(app)])
     info = plistlib.loads((app / 'Info.plist').read_bytes())
@@ -62,7 +71,7 @@ def launch(env_file, app):
         raise LocalEnvError('Only the separately signed local iPhone app can receive these settings')
     phone = select_iphone()
     env = {**os.environ,
-           'DEVICECTL_CHILD_OMI_LOCAL_MAC_URL': values['OMI_NGROK_URL'],
+           'DEVICECTL_CHILD_OMI_LOCAL_MAC_URL': url,
            'DEVICECTL_CHILD_OMI_LOCAL_MAC_KEY': values['OMI_LOCAL_APP_KEY']}
     # The ngrok agent credential is deliberately not forwarded, even if ambient.
     env.pop('NGROK_AUTHTOKEN', None)

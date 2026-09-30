@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import subprocess
 
-from . import (local_live, local_live_install, local_stt, local_stt_watch, local_whisperkit,
+from . import (config, local_live, local_live_install, local_stt, local_stt_services, local_stt_watch, local_whisperkit,
                safety, transcription_lock, whisperkit_install)
 
 
@@ -39,8 +39,8 @@ def _safe_path(cfg, path):
 
 
 def _validate_state(cfg, *, required=False):
-    if cfg.provider_mode != 'offline' or cfg.local_transport != 'ngrok':
-        raise TranscriptionSetupError('Подготовка распознавания требует локальный Mac в режиме offline/ngrok.')
+    if cfg.provider_mode != 'offline' or cfg.local_transport not in config.PAIRED_TRANSPORTS:
+        raise TranscriptionSetupError('Подготовка распознавания требует локальный Mac в парном режиме offline.')
     root = cfg.layout.state_root
     _safe_path(cfg, root)
     if cfg.layout.services_dir != root / 'services':
@@ -73,16 +73,16 @@ def final_enabled(cfg):
 def _engine(cfg):
     path = _settings_path(cfg, 'stt-engine.json')
     return _checked(lambda: local_stt.EngineConfig.load(cfg, profile=None if path.exists() else DEFAULT_ENGINE),
-                    'Не удалось проверить выбранный финальный движок; проверьте stt-engine.json.')
+                    'Cannot verify the selected final engine; check stt-engine.json.')
 
 
 def _live_settings(cfg):
     _settings_path(cfg, 'live-preview.json')
-    return _checked(lambda: local_live.settings(cfg), 'Не удалось проверить live-preview.json.')
+    return _checked(lambda: local_live.settings(cfg), 'Cannot verify live-preview.json.')
 
 
 def _managed_live(cfg, data):
-    return data['enabled'] and _checked(lambda: local_live.managed(cfg), 'Не удалось проверить настройки live.')
+    return data['enabled'] and _checked(lambda: local_live.managed(cfg), 'Cannot verify live transcription settings.')
 
 
 def _installed(check, missing_error):
@@ -91,11 +91,14 @@ def _installed(check, missing_error):
     except missing_error:
         return False
     except _ERRORS:
-        raise TranscriptionSetupError('Не удалось проверить установленные файлы распознавания.') from None
+        raise TranscriptionSetupError('Cannot verify installed transcription files.') from None
     return True
 
 
-def _check_final(engine):
+def _check_final(cfg, engine):
+    if _checked(lambda: local_stt_services.owns_final_engine(cfg, engine),
+                'Selected Argmax files are not ready; check argmax-stt.json.'):
+        return  # HTTP readiness belongs after the lifecycle starts this owned service.
     return _checked(lambda: local_stt.check_model(engine),
                     'Выбранный финальный движок не готов. Подготовьте его по docs/LOCAL_STT.md; выбор сохранён.')
 
@@ -103,17 +106,30 @@ def _check_final(engine):
 def check_models(cfg):
     """Read-only model checks; service/HTTP readiness belongs to the lifecycle."""
     _validate_state(cfg)
+    _checked(lambda: local_stt_services.preflight_argmax(cfg),
+             'Selected Argmax files are not ready; check argmax-stt.json.')
     if final_enabled(cfg):
-        _check_final(_engine(cfg))
+        _check_final(cfg, _engine(cfg))
     data = _live_settings(cfg)
     if _managed_live(cfg, data):
         _checked(lambda: local_live_install.installed(cfg.repo_root),
-                 'Live не подготовлен. Запустите start.command для подготовки моделей.')
+                 'Live transcription is not prepared. Run: ./omiloc bootstrap')
+
+
+def check_service_models(cfg):
+    """Probe the selected owned final model only after its service has started."""
+    if final_enabled(cfg):
+        engine = _engine(cfg)
+        if local_stt_services.owns_final_engine(cfg, engine):
+            _checked(lambda: local_stt.check_model(engine),
+                     'Selected final engine is not ready after starting its local service.')
 
 
 def prepare(cfg):
     """Install only missing managed models; never change engine or opt-in state."""
     _validate_state(cfg)
+    _checked(lambda: local_stt_services.preflight_argmax(cfg),
+             'Selected Argmax files are not ready; check argmax-stt.json.')
     final_root = None
     if final_enabled(cfg):
         engine = _engine(cfg)
@@ -123,11 +139,11 @@ def prepare(cfg):
             if not _installed(lambda: local_whisperkit.installed(managed_root), local_whisperkit.WhisperKitError):
                 final_root = managed_root
             else:
-                _check_final(engine)
+                _check_final(cfg, engine)
         else:
             # Prepared explicit providers/paths are supported without replacing
             # the user's chosen engine or writing outside managed model roots.
-            _check_final(engine)
+            _check_final(cfg, engine)
     live = _live_settings(cfg)
     needs_live = False
     if _managed_live(cfg, live):
@@ -139,15 +155,15 @@ def prepare(cfg):
     # creation: a failed second model preflight cannot leave a partial setup.
     if final_root is not None:
         _checked(lambda: whisperkit_install.preflight(final_root),
-                 'WhisperKit: проверьте Xcode/Swift, macOS SDK, свободное место и доступность sandbox.')
+                 'WhisperKit: check Xcode/Swift, macOS SDK, free disk space and sandbox availability.')
     if needs_live:
         _checked(lambda: local_live_install.preflight(cfg.repo_root),
-                 'Live: проверьте закреплённые исходники, Xcode/Swift, macOS SDK, свободное место и sandbox.')
+                 'Live: check pinned sources, Xcode/Swift, macOS SDK, free disk space and sandbox.')
 
     if not cfg.layout.state_root.exists():
         _checked(lambda: safety.create_state_layout(
             cfg.repo_root, cfg.instance, {'OMI_LOCAL_STATE_ROOT': str(cfg.layout.state_root.parent)}),
-            'Не удалось создать локальное окружение распознавания.')
+            'Cannot create the local transcription environment.')
     _validate_state(cfg, required=True)
     try:
         lock_context = transcription_lock.acquire(cfg.repo_root, cfg=cfg)
@@ -156,14 +172,14 @@ def prepare(cfg):
             if final_root is not None and not _installed(
                     lambda: local_whisperkit.installed(final_root), local_whisperkit.WhisperKitError):
                 _checked(lambda: whisperkit_install.install(final_root, shared_lock=lock),
-                         'Подготовка WhisperKit остановлена; проверьте .local/whisperkit/build.log и повторите запуск.')
+                         'WhisperKit preparation stopped; check .local/whisperkit/build.log and retry bootstrap.')
                 _checked(lambda: local_whisperkit.installed(final_root),
-                         'Готовность WhisperKit после установки не подтверждена; настройки сохранены.')
+                         'WhisperKit readiness is unverified after installation; settings preserved.')
             if needs_live and not _installed(lambda: local_live_install.installed(cfg.repo_root), local_live_install.LiveInstallError):
                 _checked(lambda: local_live_install.install(cfg.repo_root, shared_lock=lock),
-                         'Подготовка live остановлена; проверьте .local/parakeet-live/build.log и повторите запуск.')
+                         'Live preparation stopped; check .local/parakeet-live/build.log and retry bootstrap.')
                 _checked(lambda: local_live_install.installed(cfg.repo_root),
-                         'Готовность live после установки не подтверждена; настройки сохранены.')
+                         'Live readiness is unverified after installation; settings preserved.')
     except transcription_lock.TranscriptionLockBusy as error:
         raise TranscriptionSetupError(str(error)) from None
     except transcription_lock.TranscriptionLockError as error:
@@ -186,10 +202,10 @@ def configure_defaults(cfg):
     if not watch_path.exists():
         _safe_path(cfg, cfg.layout.services_dir / 'storage/listen-captures')
         excluded = _checked(lambda: sorted(local_stt_watch.captures(cfg)),
-                            'Не удалось проверить существующие записи; автоматическая обработка не включена.')
+                            'Cannot inspect existing recordings; automatic processing remains disabled.')
         defaults.append((watch_path, {'enabled': True, 'excluded': excluded}))
     if not live_path.exists():
         defaults.append((live_path, live))
     for path, data in defaults:
         _checked(lambda: local_stt.atomic_json(path, data),
-                 'Не удалось сохранить первые настройки распознавания; повторите запуск.')
+                 'Cannot save initial transcription settings; retry bootstrap.')

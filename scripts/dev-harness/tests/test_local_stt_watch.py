@@ -59,11 +59,11 @@ def test_existing_worker_can_finish_model_validation_after_five_seconds(tmp_path
     assert not starts, 'An owned worker validating its model must not be restarted'
 
 
-@pytest.fixture
-def setup(tmp_path, monkeypatch):
+@pytest.fixture(params=["ngrok", "tailscale"])
+def setup(tmp_path, monkeypatch, request):
     state = tmp_path / 'state'
     state.mkdir()
-    cfg = SimpleNamespace(provider_mode='offline', local_transport='ngrok',
+    cfg = SimpleNamespace(provider_mode='offline', local_transport=request.param,
                           layout=SimpleNamespace(state_root=state, services_dir=state / 'services'))
     monkeypatch.setattr(watch, 'preflight', lambda *_: None)
     monkeypatch.setattr(watch, 'start_if_enabled', lambda *a, **kw: None)

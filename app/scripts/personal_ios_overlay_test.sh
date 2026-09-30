@@ -74,6 +74,17 @@ done
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes:1' "$fixture_dir/Info-Personal.plist")" == 'bluetooth-central' ]]
 [[ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "$fixture_dir/Info-Personal.plist")" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsLocalNetworking' "$fixture_dir/Info-Personal.plist")" == 'true' ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSExceptionDomains:100.64.0.0/10:NSExceptionAllowsInsecureHTTPLoads' "$fixture_dir/Info-Personal.plist")" == 'true' ]]
+python3 - "$fixture_dir/Info-Personal.plist" <<'PY'
+import plistlib
+import sys
+
+with open(sys.argv[1], "rb") as source:
+    ats = plistlib.load(source)["NSAppTransportSecurity"]
+assert ats["NSExceptionDomains"] == {
+    "100.64.0.0/10": {"NSExceptionAllowsInsecureHTTPLoads": True}
+}
+PY
 if /usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$fixture_dir/Info-Personal.plist" >/dev/null 2>&1; then
   echo 'FAIL: Personal Team Info.plist enables NSAllowsArbitraryLoads' >&2
   exit 1

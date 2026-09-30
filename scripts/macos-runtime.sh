@@ -11,7 +11,7 @@ omi_require_apple_silicon() {
         ;;
     esac
   fi
-  echo 'Этот запуск рассчитан на Mac с Apple Silicon.' >&2
+  echo 'Native startup requires an Apple Silicon Mac. Use --runtime docker on Linux.' >&2
   return 1
 }
 
@@ -26,6 +26,12 @@ omi_macos_path() {
     export PATH="$PWD/node_modules/.bin:$brew_prefix/opt/node@22/bin:$brew_prefix/opt/openjdk@21/bin:$brew_prefix/bin:$PATH"
   else
     export PATH="$PWD/node_modules/.bin:$PATH"
+  fi
+  # Resolve from this file: setup.sh calls us after changing into app/.
+  local repo_root
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  if [[ -x "$repo_root/.local/toolchains/flutter/bin/flutter" ]]; then
+    export PATH="$repo_root/.local/toolchains/flutter/bin:$PATH"
   fi
 }
 
@@ -46,4 +52,17 @@ omi_install_fingerprint() {
 omi_install_ready() {
   [[ -f .local/install.ready && ! -L .local/install.ready ]] || return 1
   [[ "$(cat .local/install.ready)" == "$(omi_install_fingerprint)" ]]
+}
+
+omi_dependencies_ready() {
+  omi_install_ready || return 1
+  [[ -x backend/.venv/bin/python && -x node_modules/.bin/firebase ]] || return 1
+  local tool transport
+  for tool in uv node java redis-server ffmpeg jq brew; do
+    command -v "$tool" >/dev/null 2>&1 || return 1
+  done
+  omi_java_ready || return 1
+  brew list --versions opus >/dev/null 2>&1 || return 1
+  transport=$(PYTHONPATH=scripts/dev-harness backend/.venv/bin/python -m dev_harness.local_transport) || return 1
+  if [[ "$transport" == ngrok ]]; then command -v ngrok >/dev/null 2>&1 || return 1; fi
 }

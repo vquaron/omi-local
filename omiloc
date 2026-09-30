@@ -9,4 +9,47 @@ while [ -L "$omiloc_source" ]; do
   [[ "$omiloc_source" = /* ]] || omiloc_source="$omiloc_dir/$omiloc_source"
 done
 omiloc_root="$(cd -P "$(dirname "$omiloc_source")" && pwd)"
-exec /bin/bash "$omiloc_root/scripts/local-mac.sh" launcher "$@"
+cd "$omiloc_root"
+usage() {
+  cat <<'HELP'
+Usage: ./omiloc [--runtime native|docker] <command> [options]
+
+  bootstrap             Install dependencies and prepare configured models.
+  up                    Start services and wait until they are ready.
+  down                  Stop services; preserve recordings, settings and models.
+  status                Show service state and readiness.
+  logs [-f]             Show recent logs; optionally follow new output.
+  doctor [--inference]  Check prerequisites; optionally test synthetic speech.
+  open                  Open the library, or print its URL on a headless host.
+  pair                  Show the address and app key in an interactive terminal.
+  dev                   Run Docker Compose Watch in the foreground (Docker only).
+  --install             Install the native library command for this user.
+
+Defaults: native on macOS, Docker on Linux; no command opens the library.
+Docker bootstrap options: --device cpu|cuda --gpu INDEX|UUID
+  --transport local|tailscale|ngrok --model MODEL --revision REVISION --threads N
+Saved Docker settings: .env.docker. See docs/START.md and docs/DOCKER.md.
+The iPhone app has a separate launcher: ./iphone.command --help
+HELP
+}
+runtime=''
+if [[ "${1:-}" == --runtime ]]; then
+  [[ $# -ge 2 ]] || { usage >&2; exit 2; }
+  runtime=$2
+  shift 2
+fi
+case "${1:-}" in -h|--help|help) usage; exit 0 ;; esac
+if [[ -z "$runtime" ]]; then
+  case "$(uname -s)" in
+    Darwin) runtime=native ;;
+    Linux) runtime=docker ;;
+    *) echo 'Select --runtime native or --runtime docker on a supported host.' >&2; exit 2 ;;
+  esac
+fi
+command="${1:-open}"
+[[ $# == 0 ]] || shift
+case "$runtime" in
+  native) exec /bin/bash scripts/native-runtime.sh "$command" "$@" ;;
+  docker) exec /bin/bash docker.sh "$command" "$@" ;;
+  *) echo 'Runtime must be native or docker. Run ./omiloc --help.' >&2; exit 2 ;;
+esac

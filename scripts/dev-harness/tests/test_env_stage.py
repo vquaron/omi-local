@@ -123,3 +123,32 @@ def test_llm_gateway_port_override_is_isolated_from_shared_default() -> None:
     assert cfg.llm_gateway_url == "http://127.0.0.1:19080"
     assert cfg.llm_gateway_service_token.endswith(":qa-offset")
     assert config.child_env_for(cfg)["OMI_LLM_GATEWAY_URL"] == "http://127.0.0.1:19080"
+
+
+def test_tailscale_keeps_internal_hosts_and_auth_boundary_local(monkeypatch, tmp_path):
+    monkeypatch.setenv('OMI_TAILSCALE_IP', '100.64.0.1')
+    cfg = config.load_config(REPO_ROOT, env={
+        'PROVIDER_MODE': 'offline', 'OMI_LOCAL_TRANSPORT': 'tailscale',
+        'OMI_TAILSCALE_IP': '100.64.0.1', 'OMI_HARNESS_PORT_OFFSET': '12000',
+        'OMI_LOCAL_STATE_ROOT': str(tmp_path), 'OMI_LOCAL_INSTANCE': 'ngrok',
+    })
+    child = config.child_env_for(cfg)
+    assert cfg.tailscale_ip == '100.64.0.1' and cfg.dev_bind_host == '127.0.0.1'
+    assert child['BASE_API_URL'] == 'http://127.0.0.1:20000'
+    assert child['FIRESTORE_EMULATOR_HOST'].startswith('127.0.0.1:')
+    assert child['FIREBASE_AUTH_EMULATOR_HOST'].startswith('127.0.0.1:')
+    assert child['REDIS_DB_HOST'] == '127.0.0.1'
+    assert child['OMI_OFFLINE_ALLOWED_ENDPOINTS'] == '127.0.0.1:20000'
+    assert child['OMI_LOCAL_PAIRING_FILE'] == str(cfg.layout.state_root / 'pairing.json')
+    assert child['ADMIN_KEY_AUTH_ENABLED'] == 'false'
+    assert 'OMI_TAILSCALE_IP' not in child
+    assert cfg.layout.state_root == tmp_path / 'ngrok'
+
+
+def test_tailscale_rejects_nonlocal_core_runtime(tmp_path):
+    import pytest
+    base = {'PROVIDER_MODE': 'offline', 'OMI_LOCAL_TRANSPORT': 'tailscale',
+            'OMI_LOCAL_STATE_ROOT': str(tmp_path)}
+    for change in ({'OMI_DEV_BIND_HOST': '100.64.0.1'}, {'PROVIDER_MODE': 'real'}):
+        with pytest.raises(safety.SafetyError, match='offline providers and loopback'):
+            config.load_config(REPO_ROOT, env={**base, **change})

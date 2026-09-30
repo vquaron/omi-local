@@ -3219,12 +3219,13 @@
     "conversationsNotCapturedCount": "Не е записано ({count})",
     "transcriptionNoAudio": "Транскрипцията не получава аудио",
     "localMacTitle": "Local Mac",
-    "localMacAddress": "HTTPS address",
+    "localMacAddress": "Tailscale IP / HTTPS",
     "localMacAccessKey": "App access key",
     "localMacConnect": "Check and connect",
     "localMacKeyRejected": "The access key was rejected. Check the key on your Mac.",
     "localMacConnectionFailed": "Could not connect. Check the address and that your Mac and tunnel are running.",
-    "localMacHelp": "Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.",
+    "localMacHelp": "Въведете Tailscale IP (или IP:порт) или ngrok HTTPS адрес и ключа на приложението. Свързването спира записа. Аудиото остава на вашия сървър.",
     "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
-    "tapPlusToStartRecording": "Tap + to start recording"
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "localMacServers": "Запазени сървъри"
 }

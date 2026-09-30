@@ -174,8 +174,10 @@ def cfg(tmp_path):
                            layout=SimpleNamespace(state_root=state, services_dir=state / 'services'))
 
 
-def test_import_retry_reuses_finished_engine_output_and_model_change_is_separate(tmp_path, monkeypatch):
+@pytest.mark.parametrize("transport", ["ngrok", "tailscale"])
+def test_import_retry_reuses_finished_engine_output_and_model_change_is_separate(tmp_path, monkeypatch, transport):
     settings = cfg(tmp_path)
+    settings.local_transport = transport
     audio = audio_file(tmp_path)
     python = tmp_path / 'python'
     python.write_text('fixture')
@@ -450,7 +452,8 @@ def test_apply_live_rechecks_capture_after_model_startup(tmp_path, monkeypatch):
     assert started == [True]
 
 
-def test_managed_live_preserves_virtualenv_interpreter_path(tmp_path, monkeypatch):
+@pytest.mark.parametrize("transport", ["ngrok", "tailscale"])
+def test_managed_live_preserves_virtualenv_interpreter_path(tmp_path, monkeypatch, transport):
     from dev_harness import cli, config, local_stt_services as services
     runtime = tmp_path / 'runtime'
     runtime.write_text('synthetic')
@@ -460,7 +463,7 @@ def test_managed_live_preserves_virtualenv_interpreter_path(tmp_path, monkeypatc
     python.symlink_to(runtime)
     model = tmp_path / 'model'
     model.mkdir()
-    cfg = SimpleNamespace(repo_root=tmp_path, provider_mode='offline', local_transport='ngrok',
+    cfg = SimpleNamespace(repo_root=tmp_path, provider_mode='offline', local_transport=transport,
                           layout=SimpleNamespace(state_root=tmp_path, services_dir=tmp_path / 'services'))
     (tmp_path / 'live-stt.json').write_text(json.dumps({
         'enabled': True, 'provider': 'whisperlivekit', 'url': 'ws://127.0.0.1:18090/asr',
@@ -498,8 +501,11 @@ def test_managed_stt_detects_failed_start_without_waiting_for_model_timeout(tmp_
     from dev_harness import cli, config, local_stt_services as services
     cfg = SimpleNamespace(repo_root=tmp_path, provider_mode='offline', local_transport='ngrok',
                           layout=SimpleNamespace(state_root=tmp_path, services_dir=tmp_path / 'services'))
+    binary = tmp_path / 'argmax'
+    binary.write_text('synthetic executable')
+    binary.chmod(0o700)
     (tmp_path / 'argmax-stt.json').write_text(json.dumps({
-        'enabled': True, 'port': 10301, 'model': 'turbo', 'binary': str(tmp_path),
+        'enabled': True, 'port': 10301, 'model': 'turbo', 'binary': str(binary),
         'model_dir': str(tmp_path), 'tokenizer_dir': str(tmp_path)}))
     monkeypatch.setattr(config, 'child_env_for', lambda cfg: {})
     monkeypatch.setattr(cli, '_start_process', lambda *a, **kw: None)

@@ -503,7 +503,15 @@ function check_ios_signing() {
 }
 
 function prepare_ios_signing() {
-  local reply
+  local reply config saved_team
+  config="$(dirname "${BASH_SOURCE[0]}")/ios/Flutter/PersonalTeam.xcconfig"
+  # Read only the known field; never execute the private xcconfig as shell code.
+  if [[ -z "${OMI_APPLE_TEAM_ID:-}" && -f "$config" && ! -L "$config" ]]; then
+    saved_team=$(sed -n 's/^OMI_APPLE_TEAM_ID=\([A-Z0-9]\{10\}\)$/\1/p' "$config")
+    if [[ "$saved_team" =~ ^[A-Z0-9]{10}$ ]]; then
+      OMI_APPLE_TEAM_ID="$saved_team"
+    fi
+  fi
   while :; do
     if ! [[ "${OMI_APPLE_TEAM_ID:-}" =~ ^[A-Z0-9]{10}$ ]]; then
       echo 'Подпись: Xcode → Settings → Accounts → ваша Team → Manage Certificates → Apple Development.' >&2

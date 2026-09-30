@@ -3283,12 +3283,13 @@
     "conversationsNotCapturedCount": "Tidak direkam ({count})",
     "transcriptionNoAudio": "Transkripsi tidak menerima audio",
     "localMacTitle": "Local Mac",
-    "localMacAddress": "HTTPS address",
+    "localMacAddress": "Tailscale IP / HTTPS",
     "localMacAccessKey": "App access key",
     "localMacConnect": "Check and connect",
     "localMacKeyRejected": "The access key was rejected. Check the key on your Mac.",
     "localMacConnectionFailed": "Could not connect. Check the address and that your Mac and tunnel are running.",
-    "localMacHelp": "Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.",
+    "localMacHelp": "Masukkan IP Tailscale (atau IP:port) atau alamat HTTPS ngrok dan kunci aplikasi. Menghubungkan menghentikan rekaman. Audio tetap di server Anda.",
     "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
-    "tapPlusToStartRecording": "Tap + to start recording"
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "localMacServers": "Server tersimpan"
 }

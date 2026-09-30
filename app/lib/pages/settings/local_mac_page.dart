@@ -19,12 +19,15 @@ class LocalMacPage extends StatefulWidget {
   State<LocalMacPage> createState() => _LocalMacPageState();
 }
 
-enum _LocalMacOperation { loading, saving, connecting }
+enum _LocalMacOperation { loading, saving, connecting, selecting }
 
 class _LocalMacPageState extends State<LocalMacPage> with WidgetsBindingObserver {
   LocalMacSession get _session => widget.session ?? LocalMacSession.instance;
   late final _address = TextEditingController(text: _session.address);
   final _key = TextEditingController();
+  final _name = TextEditingController();
+  List<LocalMacServer> _servers = [];
+  String? _selectedServerId;
   _LocalMacOperation? _operation = _LocalMacOperation.loading;
   bool get _busy => _operation != null;
   String? _success;
@@ -42,8 +45,17 @@ class _LocalMacPageState extends State<LocalMacPage> with WidgetsBindingObserver
 
   Future<void> _loadSettings() async {
     try {
+      final servers = await _session.readServers();
       final saved = await _session.readSettings();
       if (!mounted) return;
+      _servers = servers;
+      final selected = servers
+          .where((server) => saved.serverId == null
+              ? server.address == saved.address && server.key == saved.key
+              : server.id == saved.serverId)
+          .firstOrNull;
+      _selectedServerId = selected?.id;
+      _name.text = saved.name.isEmpty ? selected?.name ?? '' : saved.name;
       _address.text = saved.address;
       _key.text = saved.key;
     } catch (_) {
@@ -73,6 +85,7 @@ class _LocalMacPageState extends State<LocalMacPage> with WidgetsBindingObserver
     WidgetsBinding.instance.removeObserver(this);
     _address.dispose();
     _key.dispose();
+    _name.dispose();
     super.dispose();
   }
 
@@ -83,7 +96,7 @@ class _LocalMacPageState extends State<LocalMacPage> with WidgetsBindingObserver
       _success = null;
     });
     try {
-      await _queueSave();
+      await _saveEntry();
       if (mounted) {
         setState(() {
           _error = null;
@@ -100,10 +113,54 @@ class _LocalMacPageState extends State<LocalMacPage> with WidgetsBindingObserver
   Future<void> _queueSave() {
     final address = _address.text;
     final key = _key.text;
-    final save = _pendingSave.then((_) => _session.saveSettings(address, key));
+    final name = _name.text;
+    final serverId = _selectedServerId;
+    final save = _pendingSave.then((_) => _session.saveSettings(address, key, name: name, serverId: serverId));
     // Each caller reports its own failure; keep later edits writable after an error.
     _pendingSave = save.onError((_, __) {});
     return save;
+  }
+
+  Future<void> _saveEntry() async {
+    await _queueSave();
+    final server =
+        await _session.saveServer(id: _selectedServerId, name: _name.text, address: _address.text, key: _key.text);
+    if (!mounted) return;
+    setState(() {
+      _servers = [..._servers.where((entry) => entry.id != server.id), server];
+      _selectedServerId = server.id;
+      _name.text = server.name;
+    });
+    await _queueSave();
+  }
+
+  Future<void> _selectServer(LocalMacServer? server, {bool delete = false}) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _operation = _LocalMacOperation.selecting;
+      _showKey = false;
+      _error = null;
+      _success = null;
+    });
+    try {
+      await _pendingSave;
+      if (delete) await _session.deleteServer(_selectedServerId!);
+      await _session.saveSettings(server?.address ?? '', server?.key ?? '',
+          name: server?.name ?? '', serverId: server?.id);
+      final servers = await _session.readServers();
+      if (!mounted) return;
+      setState(() {
+        _servers = servers;
+        _selectedServerId = server?.id;
+        _name.text = server?.name ?? '';
+        _address.text = server?.address ?? '';
+        _key.text = server?.key ?? '';
+      });
+    } catch (_) {
+      if (mounted) setState(() => _error = context.l10n.failedToSaveCheckConnection);
+    } finally {
+      if (mounted) setState(() => _operation = null);
+    }
   }
 
   Future<void> _autosave() async {
@@ -123,7 +180,7 @@ class _LocalMacPageState extends State<LocalMacPage> with WidgetsBindingObserver
       _success = null;
     });
     try {
-      await _queueSave();
+      await _saveEntry();
       if (!mounted) return;
       if (widget.stopRecording != null) {
         await widget.stopRecording!();
@@ -200,128 +257,182 @@ class _LocalMacPageState extends State<LocalMacPage> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: Text(context.l10n.localMacTitle)),
-        body: Center(
+        body: Align(
+          alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
-            child: ListView(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              children: [
-                LocalRuntimeStatusCard(
-                  session: _session,
-                  fetcher: widget.statusFetcher,
-                  active: _operation != _LocalMacOperation.connecting,
-                  refreshRevision: _statusRevision,
-                ),
-                const SizedBox(height: 20),
-                Text(context.l10n.localMacHelp,
-                    style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5)),
-                const SizedBox(height: 24),
-                TextField(
-                  key: const ValueKey('local-mac-address'),
-                  controller: _address,
-                  enabled: !_busy,
-                  keyboardType: TextInputType.url,
-                  textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  onChanged: _editSettings,
-                  decoration: _fieldDecoration(context.l10n.localMacAddress, hint: 'https://'),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  key: const ValueKey('local-mac-key'),
-                  controller: _key,
-                  enabled: !_busy,
-                  obscureText: !_showKey,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  textInputAction: TextInputAction.done,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-                  maxLength: 43,
-                  maxLengthEnforcement: MaxLengthEnforcement.none,
-                  inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
-                  onChanged: _editSettings,
-                  onSubmitted: (_) {
-                    if (!_busy) FocusManager.instance.primaryFocus?.unfocus();
-                  },
-                  decoration: _fieldDecoration(
-                    context.l10n.localMacAccessKey,
-                    suffix: Semantics(
-                      toggled: _showKey,
-                      child: IconButton(
-                        key: const ValueKey('local-mac-show-key'),
-                        tooltip: context.l10n.localMacAccessKey,
-                        color: Colors.white70,
-                        onPressed: _busy ? null : () => setState(() => _showKey = !_showKey),
-                        icon: Icon(_showKey ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LocalRuntimeStatusCard(
+                    session: _session,
+                    fetcher: widget.statusFetcher,
+                    active: _operation != _LocalMacOperation.connecting,
+                    refreshRevision: _statusRevision,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(context.l10n.localMacHelp,
+                      style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5)),
+                  const SizedBox(height: 24),
+                  InputDecorator(
+                    decoration: _fieldDecoration(context.l10n.localMacServers),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        key: const ValueKey('local-mac-servers'),
+                        value: _selectedServerId,
+                        isExpanded: true,
+                        isDense: true,
+                        hint: Text(context.l10n.add),
+                        items: _servers
+                            .map((server) => DropdownMenuItem(
+                                value: server.id, child: Text(server.name, overflow: TextOverflow.ellipsis)))
+                            .toList(),
+                        onChanged:
+                            _busy ? null : (id) => _selectServer(_servers.firstWhere((server) => server.id == id)),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  key: const ValueKey('local-mac-connect'),
-                  onPressed: _busy ? null : _connect,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    minimumSize: const Size.fromHeight(50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    spacing: 8,
+                    children: [
+                      TextButton.icon(
+                        key: const ValueKey('local-mac-add-server'),
+                        onPressed: _busy ? null : () => _selectServer(null),
+                        style: TextButton.styleFrom(foregroundColor: Colors.white70),
+                        icon: const Icon(Icons.add),
+                        label: Text(context.l10n.add),
+                      ),
+                      TextButton.icon(
+                        key: const ValueKey('local-mac-delete-server'),
+                        onPressed: _busy || _selectedServerId == null ? null : () => _selectServer(null, delete: true),
+                        style: TextButton.styleFrom(foregroundColor: Colors.white70),
+                        icon: const Icon(Icons.delete_outline),
+                        label: Text(context.l10n.delete),
+                      ),
+                    ],
                   ),
-                  child: _buttonLabel(context.l10n.localMacConnect, Icons.link, _LocalMacOperation.connecting),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  key: const ValueKey('local-mac-save'),
-                  onPressed: _busy ? null : _saveSettings,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white70,
-                    minimumSize: const Size.fromHeight(48),
-                    side: const BorderSide(color: Colors.white24),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const ValueKey('local-mac-name'),
+                    controller: _name,
+                    enabled: !_busy,
+                    textInputAction: TextInputAction.next,
+                    maxLength: 80,
+                    onChanged: _editSettings,
+                    decoration: _fieldDecoration(context.l10n.name),
                   ),
-                  child: _buttonLabel(context.l10n.saveCredentials, Icons.save_outlined, _LocalMacOperation.saving),
-                ),
-                if (_error != null || _success != null) ...[
                   const SizedBox(height: 16),
-                  Semantics(
-                    liveRegion: true,
-                    child: Container(
-                      key: const ValueKey('local-mac-result'),
-                      padding: const EdgeInsets.all(16),
-                      decoration:
-                          BoxDecoration(color: const Color(0xFF222222), borderRadius: BorderRadius.circular(12)),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            _error != null ? Icons.error_outline : Icons.check_circle_outline,
-                            size: 20,
-                            color: _error != null ? const Color(0xFFFFB4AB) : Colors.white70,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(_error ?? _success!, style: const TextStyle(height: 1.4)),
-                                if (_error == null && _success == context.l10n.connected) ...[
-                                  if (_session.readiness.live != 'ready')
-                                    Text('${context.l10n.liveTranscript}: ${_readinessLabel(_session.readiness.live)}'),
-                                  if (_session.readiness.finalTranscript != 'ready')
-                                    Text(
-                                        '${context.l10n.transcript}: ${_readinessLabel(_session.readiness.finalTranscript)}'),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
+                  TextField(
+                    key: const ValueKey('local-mac-address'),
+                    controller: _address,
+                    enabled: !_busy,
+                    keyboardType: TextInputType.url,
+                    textInputAction: TextInputAction.next,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    onChanged: _editSettings,
+                    decoration: _fieldDecoration(context.l10n.localMacAddress, hint: '100.64.0.1:20000'),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    key: const ValueKey('local-mac-key'),
+                    controller: _key,
+                    enabled: !_busy,
+                    obscureText: !_showKey,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    textInputAction: TextInputAction.done,
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+                    maxLength: 43,
+                    maxLengthEnforcement: MaxLengthEnforcement.none,
+                    inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+                    onChanged: _editSettings,
+                    onSubmitted: (_) {
+                      if (!_busy) FocusManager.instance.primaryFocus?.unfocus();
+                    },
+                    decoration: _fieldDecoration(
+                      context.l10n.localMacAccessKey,
+                      suffix: Semantics(
+                        toggled: _showKey,
+                        child: IconButton(
+                          key: const ValueKey('local-mac-show-key'),
+                          tooltip: context.l10n.localMacAccessKey,
+                          color: Colors.white70,
+                          onPressed: _busy ? null : () => setState(() => _showKey = !_showKey),
+                          icon: Icon(_showKey ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                        ),
                       ),
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    key: const ValueKey('local-mac-connect'),
+                    onPressed: _busy ? null : _connect,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size.fromHeight(50),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _buttonLabel(context.l10n.localMacConnect, Icons.link, _LocalMacOperation.connecting),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    key: const ValueKey('local-mac-save'),
+                    onPressed: _busy ? null : _saveSettings,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      minimumSize: const Size.fromHeight(48),
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _buttonLabel(context.l10n.saveCredentials, Icons.save_outlined, _LocalMacOperation.saving),
+                  ),
+                  if (_error != null || _success != null) ...[
+                    const SizedBox(height: 16),
+                    Semantics(
+                      liveRegion: true,
+                      child: Container(
+                        key: const ValueKey('local-mac-result'),
+                        padding: const EdgeInsets.all(16),
+                        decoration:
+                            BoxDecoration(color: const Color(0xFF222222), borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              _error != null ? Icons.error_outline : Icons.check_circle_outline,
+                              size: 20,
+                              color: _error != null ? const Color(0xFFFFB4AB) : Colors.white70,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(_error ?? _success!, style: const TextStyle(height: 1.4)),
+                                  if (_error == null && _success == context.l10n.connected) ...[
+                                    if (_session.readiness.live != 'ready')
+                                      Text(
+                                          '${context.l10n.liveTranscript}: ${_readinessLabel(_session.readiness.live)}'),
+                                    if (_session.readiness.finalTranscript != 'ready')
+                                      Text(
+                                          '${context.l10n.transcript}: ${_readinessLabel(_session.readiness.finalTranscript)}'),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

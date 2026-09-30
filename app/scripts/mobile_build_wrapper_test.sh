@@ -104,7 +104,11 @@ done
   grep -F 'flutter run --profile --flavor dev -d PHONE-B ' "$log_file" >/dev/null
   grep -Fx 'OMI_APPLE_TEAM_ID=KLMNOPQRST' ios/Flutter/PersonalTeam.xcconfig >/dev/null
   grep -Fx 'APP_BUNDLE_IDENTIFIER=com.example.omiloc' ios/Flutter/PersonalTeam.xcconfig >/dev/null
-  OMI_IOS_DEVICE_ID=PHONE-B OMI_APPLE_TEAM_ID= expect_rejected
+  # A saved, verified team is valid when the environment omits it. An explicit
+  # malformed override must still fail rather than silently selecting that team.
+  OMI_IOS_DEVICE_ID=PHONE-B OMI_APPLE_TEAM_ID= run_build_ios dev
+  grep -Fx 'OMI_APPLE_TEAM_ID=KLMNOPQRST' ios/Flutter/PersonalTeam.xcconfig >/dev/null
+  OMI_IOS_DEVICE_ID=PHONE-B OMI_APPLE_TEAM_ID=invalid expect_rejected
   OMI_IOS_DEVICE_ID=PHONE-B OMI_PERSONAL_BUNDLE_ID=com.omi.local. expect_rejected
   OMI_IOS_DEVICE_ID=PHONE-B expect_rejected prod
   OMI_IOS_DEVICE_ID=PHONE-B OMI_RUNTIME_MODE=standard expect_rejected

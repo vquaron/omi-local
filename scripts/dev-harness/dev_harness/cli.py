@@ -17,6 +17,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from dataclasses import replace
 from typing import Iterable
 
 from . import config, providers, safety, memory_scenarios
@@ -172,6 +173,11 @@ def _typesense_container_running(cfg: config.HarnessConfig) -> bool:
     return bool(result.stdout.strip())
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, newurl):
+        return None
+
+
 def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]:
     if service == "live-preview":
         from .local_live import health
@@ -205,7 +211,16 @@ def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]
             return False, "container-not-running"
         return False, detail
     if service == "backend":
-        return _http_ok(f"{cfg.backend_url}/v1/health")
+        ready, detail = _http_ok(f"{cfg.backend_url}/v1/health")
+        if ready and cfg.local_transport == "tailscale" and cfg.tailscale_ip:
+            try:
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+                with opener.open(f"http://{cfg.tailscale_ip}:{cfg.backend_port}/v1/health", timeout=2) as response:
+                    ready = response.status == 200
+            except (OSError, ValueError):
+                ready = False
+            return ready, "Tailscale backend listeners ready" if ready else "Tailscale listener unavailable"
+        return ready, detail
     if service == "ngrok":
         from .local_mac import ngrok_port, read_config
         try:
@@ -613,6 +628,11 @@ def _prepend_pythonpath(env: dict[str, str], *entries: Path) -> None:
     env["PYTHONPATH"] = os.pathsep.join(values)
 
 
+def _tailscale_interface_digest(cfg: config.HarnessConfig) -> str:
+    value = cfg.tailscale_ip if cfg.local_transport == "tailscale" else ""
+    return hashlib.sha256(value.encode("ascii")).hexdigest() if value else ""
+
+
 def _start_process(
     cfg: config.HarnessConfig,
     service: str,
@@ -628,6 +648,9 @@ def _start_process(
         healthy, detail = _service_health(cfg, service)
         if service in {"backend", "firestore"} and existing.get("local_transport", "lan") != cfg.local_transport:
             healthy, detail = False, "local transport configuration changed"
+        if (service == "backend" and cfg.local_transport == "tailscale"
+                and existing.get("tailscale_interface_digest", "") != _tailscale_interface_digest(cfg)):
+            healthy, detail = False, "Tailscale interface configuration changed"
         if healthy:
             print(f"{service}: already recorded as running")
             return
@@ -665,7 +688,8 @@ def _start_process(
         {
             "service": service,
             "local_transport": cfg.local_transport,
-            **({"local_live_preview_url": child_env.get("OMI_LOCAL_LIVE_PREVIEW_URL", "")}
+            **({"local_live_preview_url": child_env.get("OMI_LOCAL_LIVE_PREVIEW_URL", ""),
+                "tailscale_interface_digest": _tailscale_interface_digest(cfg)}
                if service == "backend" else {}),
             "pid": proc.pid,
             "process_group": proc.pid,
@@ -689,7 +713,7 @@ def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"Cannot load firebase.json for harness: {exc}") from exc
     emulators = payload.setdefault("emulators", {})
-    if cfg.local_transport == "ngrok":
+    if cfg.local_transport in config.PAIRED_TRANSPORTS:
         emulators["ui"] = {"enabled": False}
         emulators["hub"] = {"host": "127.0.0.1", "port": cfg.backend_port + 401}
         emulators["logging"] = {"host": "127.0.0.1", "port": cfg.backend_port + 501}
@@ -799,7 +823,9 @@ def _stop_unused_offline_services(cfg: config.HarnessConfig) -> None:
         return
     # local_mac.up prepares its providers before starting the core harness.
     # They belong to this stack and must survive both startup and repeated up.
-    allowed = _OFFLINE_SERVICES | (_LOCAL_MAC_SERVICES if cfg.local_transport == "ngrok" else frozenset())
+    allowed = _OFFLINE_SERVICES | (_LOCAL_MAC_SERVICES if cfg.local_transport in config.PAIRED_TRANSPORTS else frozenset())
+    if cfg.local_transport == "tailscale":
+        allowed -= {"ngrok"}  # A transport switch must remove the old public ingress.
     for record in _process_records(cfg):
         if str(record.get("service")) not in allowed:
             _stop_single_service(cfg, record)
@@ -850,6 +876,15 @@ def _start_infrastructure(cfg: config.HarnessConfig) -> None:
         )
 
 
+def backend_restart_config(cfg: config.HarnessConfig) -> config.HarnessConfig:
+    """Resolve native reachability before a caller stops the existing backend."""
+    if (getattr(cfg, "local_transport", "lan") == "tailscale"
+            and not getattr(cfg, "container_runtime", False)):
+        from .local_transport import tailscale_ip
+        return replace(cfg, tailscale_ip=tailscale_ip(cfg.tailscale_ip))
+    return cfg
+
+
 def _start_app_services(cfg: config.HarnessConfig) -> None:
     """Start the isolated gateway, backend, and desktop-backend."""
     if cfg.provider_mode != "offline":
@@ -870,14 +905,27 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
             log_name="llm-gateway.log",
             port=cfg.llm_gateway_port,
         )
+    backend_env = config.child_env_for(cfg)
+    if cfg.local_transport == "tailscale" and not cfg.container_runtime:
+        from .tailscale_backend import listener_addresses
+        backend_env.update(OMI_TAILSCALE_IP=cfg.tailscale_ip, OMI_DEV_BIND_HOST=cfg.dev_bind_host)
+        listener_addresses(backend_env)  # Reject missing/invalid native interface before launching.
+        backend_command = [sys.executable, "-m", "dev_harness.tailscale_backend"]
+    else:
+        backend_command = [
+            sys.executable, "-m", "uvicorn", "main:app", "--host", cfg.dev_bind_host,
+            "--port", str(cfg.backend_port),
+            *(["--no-access-log", "--log-level", "warning"] if cfg.local_transport in config.PAIRED_TRANSPORTS else []),
+            *(["--no-proxy-headers"] if cfg.container_runtime else []),
+        ]
     _start_process(
         cfg,
         "backend",
-        [sys.executable, "-m", "uvicorn", "main:app", "--host", cfg.dev_bind_host, "--port", str(cfg.backend_port),
-         *(["--no-access-log", "--log-level", "warning"] if cfg.local_transport == "ngrok" else [])],
+        backend_command,
         cwd=cfg.repo_root / "backend",
         log_name="backend.log",
         port=cfg.backend_port,
+        env=backend_env,
     )
     if cfg.provider_mode != "offline":
         _start_process(

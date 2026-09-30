@@ -15,7 +15,9 @@ Keep backend/emulator loopback addresses in the shared container network namespa
 `make test-docker` is included in the existing transport-unit CI lane. Docker changes
 need no iOS rebuild. The container supervisor must let Firebase export before exit.
 
-Ngrok transport is documented in `docs/NGROK.md`. Use `scripts/local-mac.sh` for
+Paired transports are documented in `docs/TAILSCALE.md` and `docs/NGROK.md`.
+Native Tailscale binds one backend to loopback and the verified local tailnet IP;
+Docker publishes only its paired ingress on that host IP. Keep all emulators local. Use `scripts/local-mac.sh` for
 its owned loopback stack; never expose the LAN development backend or emulators.
 Run `make test-offline` and `make test-transport-app` before the separate final iOS
 build/attestation. Finished-WAV WhisperKit/WhisperX/Parakeet transcription is documented in `docs/LOCAL_STT.md`;

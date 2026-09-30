@@ -10807,12 +10807,13 @@
     "conversationsNotCapturedCount": "Не запісана ({count})",
     "transcriptionNoAudio": "Транскрыпцыя не атрымлівае аўдыё",
     "localMacTitle": "Local Mac",
-    "localMacAddress": "HTTPS address",
+    "localMacAddress": "Tailscale IP / HTTPS",
     "localMacAccessKey": "App access key",
     "localMacConnect": "Check and connect",
     "localMacKeyRejected": "The access key was rejected. Check the key on your Mac.",
     "localMacConnectionFailed": "Could not connect. Check the address and that your Mac and tunnel are running.",
-    "localMacHelp": "Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.",
+    "localMacHelp": "Увядзіце Tailscale IP (або IP:порт) ці HTTPS-адрас ngrok і ключ праграмы. Падключэнне спыніць запіс. Аўдыя застаецца на вашым серверы.",
     "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
-    "tapPlusToStartRecording": "Tap + to start recording"
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "localMacServers": "Захаваныя серверы"
 }

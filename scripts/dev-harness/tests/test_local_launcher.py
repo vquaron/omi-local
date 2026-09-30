@@ -18,7 +18,7 @@ def layout(tmp_path, monkeypatch):
     home.mkdir()
     source = Path(__file__).resolve().parents[3] / 'omiloc'
     shutil.copy2(source, repo / 'omiloc')
-    (repo / 'scripts/local-mac.sh').write_text('printf "%s\\n" "$@"\n')
+    (repo / 'scripts/native-runtime.sh').write_text('printf "%s\\n" "$@"\n')
     monkeypatch.setenv('SHELL', '/bin/zsh')
     monkeypatch.setenv('PATH', '/usr/bin:/bin')
     return repo, home
@@ -36,7 +36,9 @@ def test_install_is_idempotent_and_runs_from_unrelated_directory(layout, tmp_pat
     assert first.count(b'export PATH=') == 1
     result = subprocess.run([str(target), '--help'], cwd=tmp_path, text=True, capture_output=True)
     assert result.returncode == 0
-    assert result.stdout.splitlines() == ['launcher', '--help']
+    assert 'Usage: ./omiloc' in result.stdout
+    result = subprocess.run([str(target), '--runtime', 'native', 'open'], cwd=tmp_path, text=True, capture_output=True)
+    assert result.returncode == 0 and result.stdout.splitlines() == ['open']
 
 
 def test_install_refuses_existing_command_before_profile_change(layout):
@@ -44,7 +46,7 @@ def test_install_refuses_existing_command_before_profile_change(layout):
     target = home / '.local/bin/omiloc'
     target.parent.mkdir(parents=True)
     target.write_text('user program')
-    with pytest.raises(local_launcher.LauncherError, match='уже занято'):
+    with pytest.raises(local_launcher.LauncherError, match='already occupied'):
         local_launcher.install(repo, home=home)
     assert target.read_text() == 'user program'
     assert not (home / '.zprofile').exists()
@@ -58,7 +60,7 @@ def test_install_refuses_foreign_command_elsewhere_on_path(layout, monkeypatch):
     command.write_text('#!/bin/sh\nexit 0\n')
     command.chmod(0o755)
     monkeypatch.setenv('PATH', str(other))
-    with pytest.raises(local_launcher.LauncherError, match='другая команда'):
+    with pytest.raises(local_launcher.LauncherError, match='Another omiloc'):
         local_launcher.install(repo, home=home)
     assert not (home / '.local').exists()
     assert not (home / '.zprofile').exists()
@@ -66,6 +68,9 @@ def test_install_refuses_foreign_command_elsewhere_on_path(layout, monkeypatch):
 
 def test_open_library_starts_before_browser_and_keeps_output_short(monkeypatch, capsys):
     events = []
+    monkeypatch.setattr(sys.stdout, 'isatty', lambda: True)
+    monkeypatch.delenv('SSH_CONNECTION', raising=False)
+    monkeypatch.delenv('SSH_TTY', raising=False)
     def start(_):
         events.append('start')
         print('internal diagnostics')
@@ -86,7 +91,7 @@ def test_failed_start_does_not_open_browser_or_leak_error(monkeypatch, capsys):
     assert local_launcher.main() == 1
     result = capsys.readouterr()
     assert result.out == '' and 'internal private details' not in result.err
-    assert './start.command --check' in result.err
+    assert './omiloc doctor' in result.err
 
 
 def test_removed_home_option_is_rejected_before_any_action(monkeypatch):
@@ -95,3 +100,11 @@ def test_removed_home_option_is_rejected_before_any_action(monkeypatch):
     with pytest.raises(SystemExit) as result:
         local_launcher.main()
     assert result.value.code == 2
+
+
+def test_headless_open_prints_url_without_starting_browser(monkeypatch, capsys):
+    monkeypatch.setenv('SSH_CONNECTION', 'fixture')
+    monkeypatch.setattr(local_launcher.local_library, 'start', lambda _: None)
+    monkeypatch.setattr(local_launcher.webbrowser, 'open', lambda _: pytest.fail('browser opened over SSH'))
+    assert local_launcher.open_library(SimpleNamespace(backend_port=20000)) == 0
+    assert 'http://127.0.0.1:20001' in capsys.readouterr().out

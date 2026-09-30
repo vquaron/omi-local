@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -13,6 +14,24 @@ import 'package:omi/utils/offline_network_policy.dart';
 class LocalMacUnauthorized implements Exception {}
 
 typedef LocalProfileProbe = Future<Map<String, dynamic>> Function(Uri base, String key);
+
+class LocalMacServer {
+  const LocalMacServer({required this.id, required this.name, required this.address, required this.key});
+
+  final String id;
+  final String name;
+  final String address;
+  final String key;
+
+  factory LocalMacServer.fromJson(Map<String, dynamic> value) => LocalMacServer(
+        id: value['id'] as String,
+        name: value['name'] as String,
+        address: value['url'] as String,
+        key: value['key'] as String,
+      );
+
+  Map<String, String> toJson() => {'id': id, 'name': name, 'url': address, 'key': key};
+}
 
 class LocalTranscriptionReadiness {
   final String live;
@@ -46,6 +65,7 @@ class LocalMacSession extends ChangeNotifier {
   static final instance = LocalMacSession();
   static const storageKey = 'omi.localMacPairing.v1';
   static const settingsKey = 'omi.localMacSettings.v1';
+  static const serversKey = 'omi.localMacServers.v1';
   final FlutterSecureStorage _storage;
   final LocalProfileProbe _probe;
   Uri? _base;
@@ -73,18 +93,86 @@ class LocalMacSession extends ChangeNotifier {
   }
 
   /// Editing settings never activates a server or changes the authenticated origin.
-  Future<({String address, String key})> readSettings() async {
+  Future<({String address, String key, String name, String? serverId})> readSettings() async {
     final raw = await _storage.read(key: settingsKey);
     if (raw != null) {
       final saved = jsonDecode(raw) as Map<String, dynamic>;
-      return (address: saved['url'] as String, key: saved['key'] as String);
+      return (
+        address: saved['url'] as String,
+        key: saved['key'] as String,
+        name: saved['name'] as String? ?? '',
+        serverId: saved['serverId'] as String?,
+      );
     }
-    return (address: address, key: _key ?? '');
+    return (address: address, key: _key ?? '', name: '', serverId: null);
   }
 
-  Future<void> saveSettings(String address, String key) async {
+  Future<void> saveSettings(String address, String key, {String name = '', String? serverId}) async {
     if (!Env.isOfflineRuntime) throw StateError('Local Mac requires offline runtime');
-    await _storage.write(key: settingsKey, value: jsonEncode({'url': address.trim(), 'key': normalizeKey(key)}));
+    await _storage.write(
+        key: settingsKey,
+        value:
+            jsonEncode({'url': address.trim(), 'key': normalizeKey(key), 'name': name.trim(), 'serverId': serverId}));
+  }
+
+  /// Saved entries are credentials, not sessions. Migration never authenticates.
+  Future<List<LocalMacServer>> readServers() async {
+    if (!Env.isOfflineRuntime) throw StateError('Local Mac requires offline runtime');
+    final raw = await _storage.read(key: serversKey);
+    if (raw != null) {
+      return (jsonDecode(raw) as List).map((value) => LocalMacServer.fromJson(value as Map<String, dynamic>)).toList();
+    }
+    final servers = <LocalMacServer>[];
+    for (final legacyKey in [settingsKey, storageKey]) {
+      final legacy = await _storage.read(key: legacyKey);
+      if (legacy == null) continue;
+      final saved = jsonDecode(legacy) as Map<String, dynamic>;
+      final address = saved['url'] as String? ?? '';
+      final key = saved['key'] as String? ?? '';
+      if (address.isEmpty || key.isEmpty) continue;
+      String canonical(String address) {
+        try {
+          return Env.parseLocalTunnelUrl(address).toString();
+        } on FormatException {
+          return address.trim(); // Preserve unfinished drafts for editing.
+        }
+      }
+
+      if (servers.any((server) => canonical(server.address) == canonical(address) && server.key == key)) continue;
+      servers.add(LocalMacServer(id: const Uuid().v4(), name: address, address: address, key: key));
+    }
+    await _writeServers(servers);
+    return servers;
+  }
+
+  Future<void> _writeServers(List<LocalMacServer> servers) =>
+      _storage.write(key: serversKey, value: jsonEncode(servers.map((server) => server.toJson()).toList()));
+
+  Future<LocalMacServer> saveServer(
+      {String? id, required String name, required String address, required String key}) async {
+    final servers = await readServers();
+    address = address.trim();
+    if (address.isEmpty) throw const FormatException('Server address is required');
+    final index = id == null ? -1 : servers.indexWhere((server) => server.id == id);
+    if (id != null && index < 0) throw StateError('Saved server no longer exists');
+    final server = LocalMacServer(
+        id: id ?? const Uuid().v4(),
+        name: name.trim().isEmpty ? address : name.trim(),
+        address: address,
+        key: normalizeKey(key));
+    if (index < 0) {
+      servers.add(server);
+    } else {
+      servers[index] = server;
+    }
+    await _writeServers(servers);
+    return server;
+  }
+
+  Future<void> deleteServer(String id) async {
+    final servers = await readServers();
+    servers.removeWhere((server) => server.id == id);
+    await _writeServers(servers);
   }
 
   Future<void> restore() async {
@@ -136,10 +224,12 @@ class LocalMacSession extends ChangeNotifier {
 
   bool permits(Uri uri) =>
       _base != null &&
-      (uri.scheme == 'https' || uri.scheme == 'wss') &&
+      (_base!.scheme == 'https'
+          ? uri.scheme == 'https' || uri.scheme == 'wss'
+          : uri.scheme == 'http' || uri.scheme == 'ws') &&
       uri.userInfo.isEmpty &&
       uri.host == _base!.host &&
-      (uri.hasPort ? uri.port : 443) == 443;
+      (uri.hasPort ? uri.port : (_base!.scheme == 'https' ? 443 : 80)) == _base!.port;
 
   String authorizationFor(Uri uri) {
     if (!permits(uri) || !isSignedIn) throw LocalMacUnauthorized();
@@ -165,6 +255,7 @@ class LocalMacSession extends ChangeNotifier {
     notifyListeners();
     await _storage.write(key: storageKey, value: jsonEncode({'url': address, 'rejected': true}));
     await _storage.delete(key: settingsKey);
+    await _storage.delete(key: serversKey);
   }
 
   static Future<Map<String, dynamic>> probeProfile(Uri base, String key) =>

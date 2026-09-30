@@ -2,8 +2,11 @@
 
 Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds app-specific operational guidance.
 
-Local ngrok pairing uses `LocalMacSession` and Keychain, restored before network
-initialization. Keep HTTP/WSS credentials confined to the paired origin and block
+Local Tailscale/ngrok pairing uses `LocalMacSession` and Keychain, restored before network
+initialization. Bare Tailscale IPv4 defaults to HTTP port 20000; Docker pairing uses
+the explicit published port (21000 by default). A full HTTP URL without a port
+uses standard port 80. HTTP/WS is allowed only for
+100.64.0.0/10; HTTPS/WSS remains on port 443. Keep credentials confined to the paired origin and block
 redirects. Local sessions do not require Firebase Auth. `make test-transport-app`
 at the repo root covers pairing, network policy, legacy auth, and the analyzer.
 After deletion from the local web library, pull down the Conversations list to
@@ -19,12 +22,18 @@ Stop fences pending phone startup and reconnect; native Start waits for native S
 Phone actions and failure feedback must follow the selected input and capture state.
 Phone-microphone PCM16 must include `source=phone` on the initial listen socket
 as well as reconnects; the local capture sink uses that source to select WAV capture.
-Local Mac form settings are a separate Keychain draft, not an authenticated session.
+Local Mac saves named servers in Keychain and keeps form edits in a separate draft.
+Migrate the legacy pairing/draft once without authenticating; an empty saved list
+must not restore deleted entries. Selecting, editing or deleting a saved server
+does not change the active pairing. Only successful verification switches it;
+sign-out clears the saved credentials too.
 Saving or revealing a key must not switch the active origin or send network requests.
 Reveal the key inline; hide it on background without navigating. Check and connect
 keeps the form open with its values and an inline result, then refreshes runtime
 status even for unchanged credentials. Edits clear previous form results.
-The optional iOS launch handoff passes only the local URL/app key through the existing
+Personal Team ATS permits HTTP only for the Tailscale CIDR in addition to existing
+local networking; never add a global arbitrary-load exception. IP/CIDR ATS exceptions
+require iOS 17 or newer. The optional iOS launch handoff passes only the local URL/app key through the existing
 environment channel into Keychain. Never embed `.env` or the ngrok authtoken in the app.
 Local runtime status uses authenticated `/v1/local/status`, not the public health probe.
 Keep Mac reachability, received-audio counters and live-ASR readiness distinct; errors

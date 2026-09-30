@@ -10016,7 +10016,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get localMacTitle => 'Local Mac';
 
   @override
-  String get localMacAddress => 'HTTPS address';
+  String get localMacAddress => 'Tailscale IP / HTTPS';
 
   @override
   String get localMacAccessKey => 'App access key';
@@ -10033,5 +10033,8 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get localMacHelp =>
-      'Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.';
+      'Gib die Tailscale-IP (oder IP:Port) oder ngrok-HTTPS-Adresse und den App-Schlüssel ein. Verbinden beendet die Aufnahme. Audio bleibt auf deinem Server.';
+
+  @override
+  String get localMacServers => 'Gespeicherte Server';
 }

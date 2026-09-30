@@ -12,7 +12,7 @@ def installation(tmp_path):
     root = Path(__file__).resolve().parents[3]
     repo = tmp_path / 'project with spaces'
     (repo / 'scripts').mkdir(parents=True)
-    for name in ('scripts/install-local-mac.sh', 'scripts/macos-runtime.sh', 'start.command'):
+    for name in ('scripts/install-local-mac.sh', 'scripts/macos-runtime.sh', 'scripts/native-runtime.sh', 'omiloc', 'start.command'):
         shutil.copy2(root / name, repo / name)
     for name in ('backend/.python-version', 'backend/pylock.macos.toml', 'package.json',
                  'package-lock.json', 'firebase.json', 'web-local/index.html'):
@@ -23,7 +23,7 @@ def installation(tmp_path):
     for name in ('backend/.venv/bin/python', 'node_modules/.bin/firebase'):
         target = repo / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text('#!/bin/bash\necho emulator >> "$OMI_TEST_EVENTS"\n')
+        target.write_text('#!/bin/bash\nif [[ "$2" == dev_harness.local_transport ]]; then echo ngrok; exit; fi\nif [[ "$2" == dev_harness.local_setup ]]; then echo "$3" >> "$OMI_TEST_EVENTS"; exit; fi\necho emulator >> "$OMI_TEST_EVENTS"\n')
         target.chmod(0o700)
     sync = repo / 'backend/scripts/sync-python-deps.sh'
     sync.parent.mkdir()
@@ -54,7 +54,7 @@ npm() {
 ''')
     events = tmp_path / 'events'
     env = {**os.environ, 'BASH_ENV': str(shell_env), 'OMI_TEST_EVENTS': str(events),
-           'OMI_TEST_PREFIX': str(tmp_path / 'brew'), 'OMI_TEST_FAIL': ''}
+           'OMI_TEST_PREFIX': str(tmp_path / 'brew'), 'OMI_TEST_FAIL': '', 'PYTHON': str(repo / 'backend/.venv/bin/python')}
     return repo, env, events
 
 
@@ -84,13 +84,13 @@ def test_start_recovers_interruption_before_marking_install_complete(installatio
     recording.write_text('synthetic data must survive setup')
     assert start(repo, {**env, 'OMI_TEST_FAIL': failure}) != 0
     assert not (repo / '.local/install.ready').exists()
-    assert 'start' not in events.read_text().splitlines()
+    assert 'up' not in events.read_text().splitlines()
     assert start(repo, env) == 0
     assert (repo / '.local/install.ready').is_file()
-    assert events.read_text().splitlines()[-1] == 'start'
+    assert events.read_text().splitlines()[-3:] == ['bootstrap', 'up', 'open']
     before = events.read_text()
     assert start(repo, env) == 0
-    assert events.read_text() == before + 'start\n'
+    assert events.read_text() == before + 'bootstrap\nup\nopen\n'
     (repo / 'backend/pylock.macos.toml').write_text('updated dependencies')
     assert start(repo, env) == 0
     assert events.read_text()[len(before):].splitlines().count('sync') == 1
@@ -121,7 +121,7 @@ def test_second_installer_does_not_invalidate_an_active_install(installation):
         blocked = subprocess.run(['bash', 'scripts/install-local-mac.sh', '--quiet'],
                                  cwd=repo, env=env, capture_output=True, text=True)
         assert blocked.returncode != 0
-        assert 'уже выполняется' in blocked.stderr
+        assert 'already running' in blocked.stderr
         assert not events.exists()
         assert ready.read_text() == 'existing completed installation'
 
@@ -144,17 +144,17 @@ if [[ ! -f .local/retry-allowed ]]; then exit 9; fi
     output = b''
     try:
         deadline = time.monotonic() + 10
-        while 'q — выйти: '.encode() not in output and time.monotonic() < deadline:
+        while 'q to exit: '.encode() not in output and time.monotonic() < deadline:
             if select.select([master], [], [], 0.1)[0]:
                 output += os.read(master, 65536)
-        assert 'повторить проверку и установку'.encode() in output
+        assert 'Enter to retry'.encode() in output
         assert not (repo / '.local/install.ready').exists()
-        assert 'start' not in events.read_text().splitlines()
+        assert 'up' not in events.read_text().splitlines()
         (repo / '.local/retry-allowed').touch()
         os.write(master, b'\n')
         assert process.wait(timeout=10) == 0
         assert (repo / '.local/install.ready').is_file()
-        assert events.read_text().splitlines() == ['sync', 'sync', 'npm', 'emulator', 'check', 'start']
+        assert events.read_text().splitlines() == ['sync', 'sync', 'npm', 'emulator', 'check', 'bootstrap', 'up', 'open']
     finally:
         if process.poll() is None:
             process.kill()

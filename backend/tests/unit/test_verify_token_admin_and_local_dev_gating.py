@@ -98,7 +98,8 @@ def _endpoints_isolation():
 ADMIN_KEY = 'a-sufficiently-long-admin-key-value'
 
 
-def test_tunnel_never_falls_back_to_admin_or_local_dev(monkeypatch, tmp_path):
+@pytest.mark.parametrize("transport", ["ngrok", "tailscale"])
+def test_tunnel_never_falls_back_to_admin_or_local_dev(monkeypatch, tmp_path, transport):
     import hashlib
     import json
 
@@ -107,7 +108,7 @@ def test_tunnel_never_falls_back_to_admin_or_local_dev(monkeypatch, tmp_path):
     pairing.write_text(json.dumps({"version": 1, "owner_uid": "synthetic-owner", "key_sha256": hashlib.sha256(key.encode()).hexdigest()}))
     pairing.chmod(0o600)
     monkeypatch.setenv("OMI_ENV_STAGE", "offline")
-    monkeypatch.setenv("OMI_LOCAL_TRANSPORT", "ngrok")
+    monkeypatch.setenv("OMI_LOCAL_TRANSPORT", transport)
     monkeypatch.setenv("OMI_LOCAL_PAIRING_FILE", str(pairing))
     monkeypatch.setenv("ADMIN_KEY", ADMIN_KEY)
     monkeypatch.setenv("LOCAL_DEVELOPMENT", "true")

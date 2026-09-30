@@ -14,6 +14,7 @@ services:
     environment:
       PROVIDER_MODE: offline
       OMI_LOCAL_TRANSPORT: ngrok
+      OMI_CONTAINER_RUNTIME: '1'
       OMI_LOCAL_INSTANCE: docker
       OMI_LOCAL_STATE_ROOT: /data/harness
       OMI_HARNESS_PORT_OFFSET: '13000'
@@ -23,7 +24,7 @@ services:
     volumes:
       - state:/data
     healthcheck:
-      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:21000/v1/health', timeout=3); urllib.request.urlopen('http://127.0.0.1:21001/', timeout=3)"]
+      test: [CMD, python, docker/runtime.py, health]
       interval: 15s
       timeout: 10s
       start_period: 180s

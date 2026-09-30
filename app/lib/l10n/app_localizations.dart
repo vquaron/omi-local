@@ -18504,7 +18504,7 @@ abstract class AppLocalizations {
   /// No description provided for @localMacAddress.
   ///
   /// In en, this message translates to:
-  /// **'HTTPS address'**
+  /// **'Tailscale IP / HTTPS'**
   String get localMacAddress;
 
   /// No description provided for @localMacAccessKey.
@@ -18534,8 +18534,14 @@ abstract class AppLocalizations {
   /// No description provided for @localMacHelp.
   ///
   /// In en, this message translates to:
-  /// **'Enter the address and app key from your Mac. Connecting stops the current recording. Audio travels through ngrok and is stored on your Mac.'**
+  /// **'Enter your Tailscale IP (or IP:port), or ngrok HTTPS address, and app key. Connecting stops recording. Audio stays on your server.'**
   String get localMacHelp;
+
+  /// No description provided for @localMacServers.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved servers'**
+  String get localMacServers;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
