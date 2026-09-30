@@ -30,9 +30,9 @@ test-transport-unit:
 	env -u PROVIDER_MODE PYTHONDONTWRITEBYTECODE=1 "$${PYTHON}" -m pytest -q -p no:cacheprovider scripts/dev-harness/tests/test_local_mac.py scripts/dev-harness/tests/test_local_transport.py scripts/dev-harness/tests/test_tailscale_backend.py
 
 test-transport-app:
-	cd app && bash test.sh test/providers/conversation_provider_processing_reconcile_test.dart
+	cd app && bash test.sh test/providers/conversation_provider_processing_reconcile_test.dart test/widgets/processing_conversation_widget_test.dart
 	cd app && bash test.sh test/widgets/transcript_test.dart test/unit/stt_provider_display_test.dart test/unit/transcript_segment_speaker_test.dart test/services/sockets/transcription_service_onboarding_test.dart
-	cd app && bash test.sh test/unit/local_mac_session_test.dart test/widgets/local_mac_page_test.dart test/widgets/local_runtime_status_card_test.dart test/unit/offline_network_policy_test.dart test/unit/pure_socket_auth_test.dart test/unit/authenticated_request_401_test.dart test/unit/auth_refresh_timeout_test.dart test/unit/startup_auth_timeout_test.dart test/widgets/session_expired_reauthentication_test.dart test/providers/capture_provider_test.dart test/services/local_device_audio_start_test.dart test/widgets/temporary_recording_controls_test.dart
+	cd app && bash test.sh test/unit/local_mac_session_test.dart test/widgets/local_mac_page_test.dart test/widgets/local_runtime_status_card_test.dart test/unit/offline_network_policy_test.dart test/unit/pure_socket_auth_test.dart test/unit/authenticated_request_401_test.dart test/unit/auth_refresh_timeout_test.dart test/unit/startup_auth_timeout_test.dart test/widgets/session_expired_reauthentication_test.dart test/providers/capture_provider_test.dart test/providers/device_provider_test.dart test/services/local_device_audio_start_test.dart test/widgets/temporary_recording_controls_test.dart
 	cd app && bash scripts/analyze_ratchet.sh
 
 test-offline:
@@ -49,7 +49,7 @@ test-library:
 	env -u PROVIDER_MODE PYTHONDONTWRITEBYTECODE=1 "$${PYTHON}" -m pytest -q -p no:cacheprovider scripts/dev-harness/tests/test_local_providers.py scripts/dev-harness/tests/test_local_provider_relay.py
 	env -u PROVIDER_MODE PYTHONDONTWRITEBYTECODE=1 "$${PYTHON}" -m pytest -q -p no:cacheprovider scripts/dev-harness/tests/test_transcription_lock.py scripts/dev-harness/tests/test_live_install.py scripts/dev-harness/tests/test_local_live.py scripts/dev-harness/tests/test_local_transcription.py
 	env -u PROVIDER_MODE PYTHONDONTWRITEBYTECODE=1 "$${PYTHON}" -m pytest -q -p no:cacheprovider scripts/dev-harness/tests/test_install_recovery.py scripts/dev-harness/tests/test_stt_install.py
-	env -u PROVIDER_MODE PYTHONDONTWRITEBYTECODE=1 "$${PYTHON}" -m pytest -q -p no:cacheprovider scripts/dev-harness/tests/test_local_setup.py scripts/dev-harness/tests/test_ios_setup.py scripts/dev-harness/tests/test_local_launcher.py
+	env -u PROVIDER_MODE PYTHONDONTWRITEBYTECODE=1 "$${PYTHON}" -m pytest -q -p no:cacheprovider scripts/dev-harness/tests/test_local_setup.py scripts/dev-harness/tests/test_ios_setup.py scripts/dev-harness/tests/test_ios_scene_lifecycle.py scripts/dev-harness/tests/test_local_launcher.py
 	cd backend && env -u PROVIDER_MODE PYTHONDONTWRITEBYTECODE=1 "$${PYTHON}" -m pytest -q -p no:cacheprovider tests/unit/test_local_recording_delete.py
 	env -u PROVIDER_MODE PYTHONDONTWRITEBYTECODE=1 "$${PYTHON}" -m pytest -q -p no:cacheprovider scripts/dev-harness/tests/test_local_library.py
 	node --test web-local/*.test.mjs

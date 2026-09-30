@@ -624,7 +624,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(device: device);
+    await captureProvider?.streamDeviceRecording(
+      device: device,
+      userInitiated: captureProvider?.shouldAutomaticallyStartDeviceRecording ?? false,
+    );
 
     await getDeviceInfo();
     SharedPreferencesUtil().deviceName = device.name;

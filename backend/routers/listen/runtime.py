@@ -69,7 +69,7 @@ from database.account_deletion_policy import account_deletion_blocks_access
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.audio import AudioRingBuffer
 from utils.other.storage import get_user_has_speech_profile
-from utils.offline_audio_capture import OfflineAudioCapture, create_offline_audio_capture
+from utils.offline_audio_capture import OfflineAudioCapture, create_offline_audio_capture, rotate_offline_audio_capture
 from utils.local_live_preview import LocalLivePreview
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, person_id_for_client
 
@@ -255,6 +255,7 @@ class ListenSessionRuntime:
 
     def capture_decoded_audio(self, *, encoded_bytes: int, pcm: bytes) -> None:
         if self.capture_sink is not None:
+            self.capture_sink = rotate_offline_audio_capture(self.capture_sink)
             self.capture_sink.record_decoded_frame(encoded_bytes=encoded_bytes, pcm=pcm)
             if self.local_preview is not None:
                 self.local_preview.feed(pcm)

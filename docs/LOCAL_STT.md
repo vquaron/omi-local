@@ -185,3 +185,14 @@ After current processing finishes, restart only its worker with
 `bash scripts/local-mac.sh auto-transcribe-off`, then
 `bash scripts/local-mac.sh auto-transcribe-on`.
 Older jobs retain their previous mode; use `transcribe` for an older recording.
+
+## Continuous recording and pending audio
+
+The local receiver saves a WAV part after five minutes of decoded audio and
+continues receiving into a new part on the same socket. The final partial part
+is saved when capture stops. Transcription consumes finished parts independently.
+Conversations shows saved parts before a transcript exists, including queued,
+processing, failed and no-transcript outcomes. These cards are read-only views
+of the local audio library and disappear after successful transcript import.
+The foreground list refreshes every five seconds. Physical long-session and
+background reliability still require device verification.

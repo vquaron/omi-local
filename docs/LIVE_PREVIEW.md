@@ -109,6 +109,14 @@ The lock file must belong to the same local backend instance that performs final
 transcription. Wait for `model_ready`; `http://127.0.0.1:18090/health` contains
 only technical metrics.
 
+Managed Parakeet and WhisperLiveKit health report `busy` while their shared
+inference slot is occupied, including by final transcription. The iPhone and
+Mac status show **busy** in that case; a loaded model alone does not mean a new
+live session can start. Audio recording and final transcription remain separate.
+If a recording starts while the slot is occupied, live preview is unavailable
+for that recording; wait for final processing to finish before starting the next
+recording to use Live. The current stream does not retry busy admission.
+
 For that external process, save
 `{"enabled":true,"url":"ws://127.0.0.1:18090/asr"}` in
 `.local/dev-harness/ngrok/live-preview.json`. Only a loopback `/asr` endpoint is
@@ -272,3 +280,31 @@ produced its first live text after 3.6 seconds, nine updates, and a 19.04-second
 without decoding errors. Argmax automatically imported the final text (six segments).
 This verified the software path; physical CV1 recording after switching providers
 and long-session reliability remain unverified.
+
+
+### Live diarization status
+
+The Mac library's **Сейчас** view and the expanded **Local Mac** status card on
+iPhone show live speaker-label status separately from transcription and audio.
+The phone row is labeled **Instant speaker labels** (localized in the app).
+
+- **Off**: the selected stream explicitly disables diarization.
+- **Service/model ready**: a bounded health check confirms readiness, not inference.
+- **Service busy / waiting for data**: the service is occupied or this session has
+  negotiated diarization but has not produced usable labels yet.
+- **Labels received / N processed**: N segments in this session's current draft
+  contain labels from a provider that explicitly negotiated diarization.
+- **Cannot identify speakers / diarization error**: the stream degraded or failed.
+  Previous labels are not counted as current success; audio and ASR have separate status.
+- **Unknown**: the server or provider does not report this capability.
+
+The relay checks only the selected provider's health endpoint, with bounded time
+and response size, no redirects, and no speech transmission. Remote credentials
+remain in the relay and are not passed to an independent local diarization proxy.
+A provider without the health extension can still report capability in the next
+recording's handshake. Older phone/server versions remain usable.
+
+These are statuses of the live stream, not the separate **Diarization** provider
+for completed recordings. Labels are anonymous within a recording and do not prove
+speaker identity or diarization accuracy. A healthy service alone never marks a
+recording as successfully diarized.

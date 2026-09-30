@@ -86,6 +86,7 @@ class ParakeetWireTests(unittest.TestCase):
                     self.assertEqual(ws.receive_json()['type'], 'ready_to_stop')
                 health = client.get('/health').json()
                 self.assertFalse(health['active'])
+                self.assertFalse(health['diarization'])
                 self.assertEqual(health['last']['outcome'], 'passed')
             self.assertEqual(self.worker.loads, 1)
             self.assertEqual(self.worker.starts, 2)
@@ -103,6 +104,30 @@ class ParakeetWireTests(unittest.TestCase):
             # Session context waits for handler cleanup after disconnect.
             self.assertFalse(client.get('/health').json()['active'])
             self.assertFalse(self.worker.closed)
+
+    def test_health_observes_final_lock_without_releasing_live_session_lock(self):
+        with self.client as client:
+            self.assertFalse(client.get('/health').json()['busy'])
+            with self.lock.open('r+') as final_lock:
+                fcntl.flock(final_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                health = client.get('/health').json()
+                self.assertTrue(health['ready'])
+                self.assertTrue(health['busy'])
+                self.assertFalse(health['active'])
+                with client.websocket_connect('/asr') as rejected:
+                    with self.assertRaises(WebSocketDisconnect) as error:
+                        rejected.receive_json()
+                    self.assertEqual(error.exception.reason, 'final_transcription_busy')
+            self.assertFalse(client.get('/health').json()['busy'])
+            with client.websocket_connect('/asr') as ws:
+                self.assertEqual(ws.receive_json()['type'], 'config')
+                self.assertTrue(client.get('/health').json()['busy'])
+                with self.lock.open('r+') as observer:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(observer, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                ws.send_bytes(b'')
+                self.assertEqual(ws.receive_json()['type'], 'ready_to_stop')
+            self.assertFalse(client.get('/health').json()['busy'])
 
     def test_invalid_pcm_reaps_worker_and_next_session_uses_fresh_model_state(self):
         with self.client as client:

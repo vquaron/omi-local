@@ -170,7 +170,7 @@ xcodebuild() {
 flutter() {
   if [[ "$1" == --version ]]; then
     [[ "${TEST_FAIL:-}" != flutter ]] || return 1
-    echo 'Flutter 3.44.5'
+    echo "Flutter ${TEST_FLUTTER_VERSION:-3.47.4}"
   else
     echo '[{"id":"TEST-PHONE","targetPlatform":"ios","emulator":false,"isSupported":true}]'
   fi
@@ -228,6 +228,16 @@ def test_tools_stop_with_remedy_before_signing_or_phone(ios, failure, message):
     assert result.returncode != 0 and message in result.stderr
     assert 'signing' not in (root / 'events').read_text()
     assert 'phone' not in (root / 'events').read_text()
+
+
+@pytest.mark.parametrize('version', ['3.44.5', '3.48.0', '3.47.4-0.1.pre'])
+def test_sdk_mismatch_stops_before_signing_or_phone(ios, version):
+    root, _, _ = ios
+    result = run(ios, TEST_FLUTTER_VERSION=version)
+    assert result.returncode != 0
+    assert 'Flutter 3.47.4 из app/pubspec.yaml' in result.stderr
+    events = (root / 'events').read_text()
+    assert 'signing' not in events and 'phone' not in events
 
 
 @pytest.mark.parametrize('failure', ['missing_key', 'wrong_team', 'missing_certificate', 'keychain'])
@@ -317,10 +327,10 @@ def test_interactive_wait_rechecks_each_stage_and_can_cancel(ios, cancel):
         os.close(master)
 
 
-def test_check_only_entry_does_not_build_or_generate_config(ios):
+def test_retired_finder_check_option_fails_without_building_or_generating_config(ios):
     root, _, _ = ios
     checkout = root / 'clean checkout'
-    for name in ['start.command', 'app/setup.sh', 'scripts/macos-runtime.sh']:
+    for name in ['start.command', 'app/setup.sh', 'app/pubspec.yaml', 'scripts/macos-runtime.sh']:
         target = checkout / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((ROOT / name).read_bytes())
@@ -331,10 +341,26 @@ def test_check_only_entry_does_not_build_or_generate_config(ios):
         target.write_text('source input')
     before = {p: p.read_bytes() for p in checkout.rglob('*') if p.is_file()}
     result = run(ios, mode='check-entry', TEST_ENTRY_ROOT=str(checkout))
-    assert result.returncode == 0, result.stderr
-    assert 'Сборка и установка не запускались' in result.stdout
+    assert result.returncode == 2
+    assert 'Run ./omiloc --help' in result.stderr
     assert 'TEST-PHONE' not in result.stdout + result.stderr
     assert {p: p.read_bytes() for p in checkout.rglob('*') if p.is_file()} == before
+
+
+def test_debug_sdk_mismatch_stops_before_reading_signing_or_device(monkeypatch, tmp_path):
+    monkeypatch.setattr(ios_debug.sys, 'platform', 'darwin')
+    monkeypatch.setattr(ios_debug, 'tool_environment', lambda root: {})
+    calls = []
+
+    def rejected(args, **kwargs):
+        calls.append((args, kwargs.get('cwd')))
+        raise ios_debug.LocalEnvError('Tool check failed')
+
+    monkeypatch.setattr(ios_debug, 'capture', rejected)
+    with pytest.raises(ios_debug.LocalEnvError, match='Flutter SDK declared in app/pubspec.yaml'):
+        ios_debug.prepare(tmp_path)
+    assert calls == [(['bash', '-c', 'source ./setup.sh; check_flutter_version'], tmp_path / 'app')]
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_debug_build_attest_run_and_reuse_order(monkeypatch, tmp_path, capsys):
@@ -562,7 +588,7 @@ def test_unified_iphone_detects_legacy_session_without_exposing_arguments(tmp_pa
     monkeypatch.setattr(ios_launcher.subprocess, 'run', lambda *a, **k: pytest.fail('Started a duplicate'))
     assert ios_launcher.launch(tmp_path, 'debug', lock_path=tmp_path / 'lock') == 0
     output = capsys.readouterr().out
-    assert 'уже работает' in output
+    assert 'already running' in output
     assert 'PRIVATE-DEVICE' not in output
 
 

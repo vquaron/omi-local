@@ -254,7 +254,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 if (Env.isOfflineRuntime)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: LocalOmiButtonFeedback(action: provider.localOmiButtonFeedback),
+                    child: LocalOmiButtonFeedback(
+                        action: provider.localOmiButtonFeedback, event: provider.lastOmiButtonEvent),
                   ),
                 if (Env.isOfflineRuntime)
                   Padding(

@@ -89,6 +89,42 @@ void main() {
     expect(status.liveTranscriptState, LocalLiveTranscriptState.disabled);
     expect(status.audioSeconds, 12.8);
     expect(status.framesReceived, 640);
+    expect(status.diarizationState, LocalDiarizationState.unknown);
+  });
+
+  testWidgets('diarization readiness and actual labels are independent of live text', (tester) async {
+    final session = await paired();
+    for (final (state, expected, count) in [
+      ('disabled', 'Off', 0),
+      ('ready', 'Model Ready', 0),
+      ('pending', 'Waiting for data...', 0),
+      ('labeled', '3 processed', 3),
+      ('degraded', 'Cannot identify speakers.', 0),
+      ('unknown', 'Unknown', 0),
+    ]) {
+      await showCard(
+          tester,
+          session,
+          () async => LocalRuntimeStatus.fromJson({
+                ...payload(live: 'streaming'),
+                'diarization': {'state': state, 'labeled_segments': count},
+              }));
+      expect(value(tester, 'diarization'), expected);
+      expect(value(tester, 'transcript'), 'Transcript received: 2');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
+  test('invalid label evidence cannot claim working diarization', () {
+    for (final count in [-1, 0, '3']) {
+      expect(
+          () => LocalRuntimeStatus.fromJson({
+                ...payload(),
+                'diarization': {'state': 'labeled', 'labeled_segments': count}
+              }),
+          throwsFormatException);
+    }
   });
 
   test('unknown and malformed payloads never become a healthy status', () {
@@ -144,6 +180,7 @@ void main() {
     expect(value(tester, 'connection'), startsWith('Could not connect.'));
     expect(value(tester, 'audio'), 'Unknown');
     expect(value(tester, 'transcript'), 'Unknown');
+    expect(value(tester, 'diarization'), 'Unknown');
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -216,13 +253,15 @@ void main() {
     expect(value(tester, 'audio'), 'Total: 12 seconds');
     expect(value(tester, 'transcript'), 'Transcript received: 2');
     expect(find.text('Loading...'), findsNothing);
-    expect(find.text('Unknown'), findsNothing);
+    // This legacy response has no diarization evidence, even while ASR is healthy.
+    expect(value(tester, 'diarization'), 'Unknown');
     expect(find.byKey(const ValueKey('local-runtime-details')), findsOneWidget);
     refresh.completeError(LocalRuntimeStatusUnavailable());
     await tester.pumpAndSettle();
     expect(value(tester, 'summary'), 'Local Mac · Error');
     expect(value(tester, 'audio'), 'Unknown');
     expect(value(tester, 'transcript'), 'Unknown');
+    expect(value(tester, 'diarization'), 'Unknown');
     await tester.tap(find.byKey(const ValueKey('local-runtime-toggle')));
     await tester.pumpAndSettle();
     expect(value(tester, 'summary'), startsWith('Local Mac · Could not connect.'));
@@ -259,6 +298,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(value(tester, 'audio'), 'Unknown');
     expect(value(tester, 'transcript'), 'Unknown');
+    expect(value(tester, 'diarization'), 'Unknown');
     expect(value(tester, 'connection'), 'Loading...');
     next.complete(LocalRuntimeStatus.fromJson(payload(seconds: 3)));
     await tester.pumpAndSettle();
@@ -272,6 +312,7 @@ void main() {
     expect(value(tester, 'connection'), 'The access key was rejected. Check the key on your Mac.');
     expect(session.isSignedIn, isTrue);
     expect(value(tester, 'transcript'), 'Unknown');
+    expect(value(tester, 'diarization'), 'Unknown');
     await tester.pumpWidget(const SizedBox());
   });
 

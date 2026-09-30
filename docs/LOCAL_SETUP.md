@@ -13,12 +13,16 @@ There is no restriction to a particular iPhone model or M-series generation.
 The project targets iOS 15.0 or later; Xcode must support the phone's iOS version
 and run on your macOS version.
 
+The iOS app uses the [UIScene lifecycle](https://docs.flutter.dev/release/breaking-changes/uiscenedelegate).
+Native channels are registered when the Flutter engine is ready; scene callbacks
+handle links and Bluetooth background/foreground transitions.
+
 1. Install Xcode from the App Store, open it, accept the license, and wait for the
    iOS components to finish installing. Under **Settings → Locations → Command Line
    Tools**, select the installed Xcode.
 2. The launcher automatically uses an existing SDK at `.local/toolchains/flutter`
    in this checkout; otherwise it uses Flutter from PATH. Install [Flutter for iOS](https://docs.flutter.dev/platform-integration/ios/setup)
-   and add it to PATH as documented. Version 3.44.5 or later is required.
+   and add it to PATH as documented. Use version 3.47.4 to match the app dependency lock and CI checks.
 3. After `start.command` prepares Homebrew, install
    [CocoaPods](https://formulae.brew.sh/formula/cocoapods): `brew install cocoapods`.
    Run `flutter doctor -v`: the Xcode section must have no errors.
@@ -73,14 +77,21 @@ the app. If macOS requests access to the signing key, allow it using your Mac
 password. If the iPhone reports an untrusted developer, open **Settings → General
 → VPN & Device Management** and trust your developer identity.
 
+Verify that the main screen opens and remains responsive for a minute. Close the
+app from the app switcher and reopen it from its icon, then leave it in the
+background for 30 seconds and return. Both checks should reach the main screen
+without a crash or a stuck splash screen.
+
 The phone is selected from connected devices. With multiple phones, the script
 prompts you to choose; use `OMI_IOS_DEVICE_ID` for a noninteractive selection.
 If Xcode reports that the bundle identifier is taken, set your own
 `OMI_PERSONAL_BUNDLE_ID`. Enter the domain and key in the app after installation.
 Do not transfer old `.local`, `.venv`, `build`, keys, or signing settings.
 
-The recorded physical verification used an iPhone 17 Pro with iOS 26.6,
-Xcode 26.6, Flutter 3.44.5, and CocoaPods 1.16.2.
+The current build was physically verified on an iPhone 17 Pro using Xcode 27.0,
+Flutter 3.47.4, and CocoaPods 1.17.0. Checks covered cold launch, reopening,
+background/foreground return, CV1 start/stop and pause/resume, and final transcripts
+with live preview enabled and disabled.
 A complete repeat installation on a clean Mac remains unverified.
 
 [Reinstallation and build verification](DEVELOPMENT.md#iphone-builds) ·

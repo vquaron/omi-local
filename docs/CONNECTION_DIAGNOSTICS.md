@@ -11,7 +11,10 @@ change clears them. Run **Check and connect** first.
 ## The Omi button and recording state
 
 The home and recording screens show capture state and brief feedback for completed
-button actions separately. A short press starts recording; the next one stops it.
+button actions separately. A neutral button icon acknowledges each received BLE gesture
+for four seconds, including short press and release, even if starting audio stalls.
+The separate action result and capture status confirm what happened next.
+A short press starts recording; the next one stops it.
 Releasing the button does not start or stop recording again.
 Raw button events remain diagnostic: some firmware versions report only a recognized
 short press and release, so the physical press time cannot be inferred without an event.

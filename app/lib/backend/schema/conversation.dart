@@ -110,12 +110,22 @@ enum ConversationSource {
 class ConversationExternalData {
   final String text;
 
-  ConversationExternalData({required this.text});
+  final Map<String, dynamic>? localRecording;
 
-  factory ConversationExternalData.fromJson(Map<String, dynamic> json) =>
-      ConversationExternalData(text: json['text'] ?? '');
+  ConversationExternalData({required this.text, this.localRecording});
 
-  Map<String, dynamic> toJson() => {'text': text};
+  factory ConversationExternalData.fromJson(Map<String, dynamic> json) {
+    final recording = json['local_recording'];
+    return ConversationExternalData(
+      text: json['text'] ?? '',
+      localRecording: recording is Map ? Map<String, dynamic>.from(recording) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'text': text,
+        if (localRecording != null) 'local_recording': localRecording,
+      };
 }
 
 // ignore: constant_identifier_names

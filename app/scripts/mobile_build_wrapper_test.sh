@@ -6,6 +6,7 @@ fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/omi mobile wrapper.XXXXXX")"
 trap 'find "$fixture_dir" -depth -delete' EXIT
 mkdir -p "$fixture_dir/scripts" "$fixture_dir/ios/Runner" "$fixture_dir/ios/Flutter"
 cp "$ROOT_DIR/setup.sh" "$fixture_dir/setup.sh"
+cp "$ROOT_DIR/pubspec.yaml" "$fixture_dir/pubspec.yaml"
 cp "$ROOT_DIR/scripts/validate_mobile_build_config.sh" "$fixture_dir/scripts/"
 # Native generation/build/install are outside this portable wrapper contract.
 for script in apply_personal_ios_plugin_overlay generate_ios_dev_info_plist; do
@@ -15,7 +16,7 @@ done
 (
   cd "$fixture_dir"
   source ./setup.sh >/dev/null
-  flutter() { echo 'Flutter 3.44.5'; }
+  flutter() { echo 'Flutter 3.47.4'; }
   xcodebuild() { echo 'Xcode 26.6'; }
   xcrun() { echo "$fixture_dir"; }
   pod() { printf '%s' "$fixture_pod_version"; return "$fixture_pod_exit"; }

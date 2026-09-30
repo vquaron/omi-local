@@ -230,7 +230,8 @@ def inspect_audio(path: Path) -> dict:
         if abs(data['duration_seconds'] - duration) > 0.001 or data['source'] not in {'omi', 'phone'}:
             raise TranscriptionError('Capture metadata does not match WAV')
         started, source = data['started_at'], data['source']
-    return {'version': 1, 'audio_sha256': digest, 'duration_seconds': duration, 'started_at': started, 'source': source}
+    return {'version': 1, 'audio_sha256': digest, 'duration_seconds': duration, 'started_at': started, 'source': source,
+            **({'capture_key': hashlib.sha256(path.parent.name.encode()).hexdigest()} if metadata.exists() else {})}
 
 
 def ffmpeg_library_path(engine: EngineConfig) -> str:
@@ -477,6 +478,9 @@ def transcribe(cfg, audio_path: str, *, engine: EngineConfig | None = None) -> i
             saved = json.loads(manifest_path.read_text())
             if saved['audio_sha256'] != manifest['audio_sha256'] or saved['profile'] != manifest['profile']:
                 raise TranscriptionError('Saved result belongs to another audio/model profile')
+            if manifest.get('capture_key') and not saved.get('capture_key'):
+                saved['capture_key'] = manifest['capture_key']
+                atomic_json(manifest_path, saved)
             manifest = saved
         else:
             atomic_json(manifest_path, manifest)
@@ -504,6 +508,8 @@ def transcribe(cfg, audio_path: str, *, engine: EngineConfig | None = None) -> i
         if not reused:
             print(f'Local STT finished in {time.monotonic() - started:.1f}s; importing transcript...', flush=True)
         result = backend_step(cfg, folder)
+        if result.get('import') == 'passed' and manifest.get('capture_key'):
+            atomic_json(folder / 'import.json', {'import': 'passed', 'capture_key': manifest['capture_key']})
         print(json.dumps({**result, 'reused_transcript': reused}, ensure_ascii=False))
         print('Refresh Conversations in the app and open the local recording.')
     return 0

@@ -129,7 +129,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   if (Env.isOfflineRuntime)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: LocalOmiButtonFeedback(action: provider.localOmiButtonFeedback),
+                      child: LocalOmiButtonFeedback(
+                          action: provider.localOmiButtonFeedback, event: provider.lastOmiButtonEvent),
                     ),
                   _buildUnifiedRecordingUI(provider, header),
                 ],
@@ -912,12 +913,10 @@ getPhoneMicRecordingButton(
 }
 
 Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
-  // Only show at most 1 processing widget on homepage
-  if (conversations.isEmpty) {
-    return const SliverToBoxAdapter(child: SizedBox.shrink());
-  }
-  // Show only the first (most recent) processing conversation
-  return SliverToBoxAdapter(child: ProcessingConversationWidget(conversation: conversations.first));
+  return SliverList.list(children: [
+    for (final conversation in conversations)
+      ProcessingConversationWidget(key: ValueKey(conversation.id), conversation: conversation),
+  ]);
 }
 
 // PROCESSING CONVERSATION
@@ -934,6 +933,31 @@ class ProcessingConversationWidget extends StatefulWidget {
 class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
   @override
   Widget build(BuildContext context) {
+    final local = widget.conversation.externalIntegration?.localRecording;
+    if (local != null) {
+      final duration = Duration(seconds: (local['duration_seconds'] as num? ?? 0).round());
+      final time = widget.conversation.createdAt.toLocal();
+      final source = widget.conversation.source == ConversationSource.phone ? context.l10n.microphone : 'Omi';
+      final status = switch (local['status']) {
+        'processing' => context.l10n.transcribing,
+        'pending' => context.l10n.statusPending,
+        'failed' => context.l10n.transcriptionFailed,
+        'no_speech' => context.l10n.noTranscriptAvailable,
+        _ => context.l10n.saved,
+      };
+      return Card(
+        color: const Color(0xFF1F1F1F),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: ListTile(
+          leading: const Icon(Icons.audio_file_outlined, color: Colors.white70),
+          title: Text('$source · ${context.l10n.saved}'),
+          subtitle: Text('${MaterialLocalizations.of(context).formatShortDate(time)} '
+              '${TimeOfDay.fromDateTime(time).format(context)} · '
+              '${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}\n$status'),
+          isThreeLine: true,
+        ),
+      );
+    }
     return GestureDetector(
       onTap: () async {
         routeToPage(context, ProcessingConversationPage(conversation: widget.conversation));

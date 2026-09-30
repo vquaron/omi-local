@@ -1,7 +1,6 @@
 import UIKit
 import Flutter
 import UserNotifications
-import app_links
 #if !OMI_PERSONAL_LOCAL
 import WatchConnectivity
 #endif
@@ -85,8 +84,8 @@ final class QuickActionsIconPatcher: NSObject {
 }
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
-  private static let unusedForegroundTaskRefreshIdentifier = "com.pravera.flutter_foreground_task.refresh"
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  static let unusedForegroundTaskRefreshIdentifier = "com.pravera.flutter_foreground_task.refresh"
   private var methodChannel: FlutterMethodChannel?
   private var appleRemindersChannel: FlutterMethodChannel?
   #if !OMI_PERSONAL_LOCAL
@@ -113,95 +112,90 @@ final class QuickActionsIconPatcher: NSObject {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
     QuickActionsIconPatcher.shared.startObserving()
-      
-      
-      #if !OMI_PERSONAL_LOCAL
-      if WCSession.isSupported() {
-          session = WCSession.default
-          session?.delegate = self
-          session?.activate();
-
-          let controller = window?.rootViewController as? FlutterViewController
-            flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: controller!.binaryMessenger)
-            let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: session!, flutterWatchAPI: flutterWatchAPI)
-
-            WatchRecorderHostAPISetup.setUp(binaryMessenger: controller!.binaryMessenger, api: api)
-      }
-      #endif
-
-      // Native BLE module — register Pigeon APIs
-      NSLog("[OmiBle] Registering BLE Pigeon APIs")
-      let bleController = window?.rootViewController as? FlutterViewController
-      if let messenger = bleController?.binaryMessenger {
-          let bleFlutterApi = BleFlutterApi(binaryMessenger: messenger)
-          OmiBleManager.shared.setFlutterApi(bleFlutterApi)
-          let bleHostApi = BleHostApiImpl(bleManager: OmiBleManager.shared)
-          BleHostApiSetup.setUp(binaryMessenger: messenger, api: bleHostApi)
-          NSLog("[OmiBle] BLE Pigeon APIs registered successfully")
-      } else {
-          NSLog("[OmiBle] ERROR: Could not get FlutterBinaryMessenger")
-      }
-
-      // Ray-Ban Meta (Meta Wearables DAT camera + Bluetooth HFP mic) — Pigeon APIs.
-      // Registered unconditionally; the impl reports availability mode based on
-      // whether the DAT SDK is linked into this build.
-      #if !OMI_PERSONAL_LOCAL
-      if let messenger = (window?.rootViewController as? FlutterViewController)?.binaryMessenger {
-          let rayBanFlutterApi = RayBanMetaFlutterAPI(binaryMessenger: messenger)
-          let rayBanApi = RayBanMetaHostApiImpl(flutterAPI: rayBanFlutterApi)
-          rayBanMetaHostApi = rayBanApi
-          RayBanMetaHostAPISetup.setUp(binaryMessenger: messenger, api: rayBanApi)
-      }
-      #endif
-
-      // Native phone-mic capture (conversation recording) — Pigeon APIs.
-      // Self-healing AVAudioEngine capture; interruption/route recovery is
-      // handled natively, Dart only mirrors the state.
-      if let messenger = (window?.rootViewController as? FlutterViewController)?.binaryMessenger {
-          let phoneMicFlutterApi = PhoneMicFlutterApi(binaryMessenger: messenger)
-          let controller = PhoneMicController(flutterApi: phoneMicFlutterApi)
-          phoneMicController = controller
-          PhoneMicHostApiSetup.setUp(binaryMessenger: messenger, api: PhoneMicHostApiImpl(controller: controller))
-      }
-
-      // Retrieve the link from parameters
-    if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
-      // We have a link, propagate it to your Flutter app or not
-      AppLinks.shared.handleLink(url: url)
-      return true // Returning true will stop the propagation to other packages
+    SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
+      GeneratedPluginRegistrant.register(with: registry)
     }
+    // BGTaskScheduler registration and the notification delegate must be ready
+    // before didFinishLaunching returns, even when no scene/engine is created.
+    SwiftFlutterForegroundTaskPlugin.registerAppRefreshForBackgroundLaunch()
+    UNUserNotificationCenter.current().delegate = self
+
+    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    BGTaskScheduler.shared.cancel(
+      taskRequestWithIdentifier: AppDelegate.unusedForegroundTaskRefreshIdentifier
+    )
+    return launched
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    configureFlutterChannels(
+      messenger: engineBridge.applicationRegistrar.messenger(),
+      registry: engineBridge.pluginRegistry
+    )
+  }
+
+  private func configureFlutterChannels(messenger: FlutterBinaryMessenger, registry: FlutterPluginRegistry) {
+    #if !OMI_PERSONAL_LOCAL
+    if WCSession.isSupported() {
+      let watchSession = WCSession.default
+      session = watchSession
+      watchSession.delegate = self
+      flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: messenger)
+      let api = RecorderHostApiImpl(session: watchSession, flutterWatchAPI: flutterWatchAPI)
+      WatchRecorderHostAPISetup.setUp(binaryMessenger: messenger, api: api)
+      watchSession.activate()
+    }
+    #endif
+
+    // The implicit engine owns the messenger; no UIWindow is needed here.
+    let bleFlutterApi = BleFlutterApi(binaryMessenger: messenger)
+    OmiBleManager.shared.setFlutterApi(bleFlutterApi)
+    let bleHostApi = BleHostApiImpl(bleManager: OmiBleManager.shared)
+    BleHostApiSetup.setUp(binaryMessenger: messenger, api: bleHostApi)
+
+    #if !OMI_PERSONAL_LOCAL
+    let rayBanFlutterApi = RayBanMetaFlutterAPI(binaryMessenger: messenger)
+    let rayBanApi = RayBanMetaHostApiImpl(flutterAPI: rayBanFlutterApi)
+    rayBanMetaHostApi = rayBanApi
+    RayBanMetaHostAPISetup.setUp(binaryMessenger: messenger, api: rayBanApi)
+    #endif
+
+    let phoneMicFlutterApi = PhoneMicFlutterApi(binaryMessenger: messenger)
+    let controller = PhoneMicController(flutterApi: phoneMicFlutterApi)
+    phoneMicController = controller
+    PhoneMicHostApiSetup.setUp(binaryMessenger: messenger, api: PhoneMicHostApiImpl(controller: controller))
+
     //Creates a method channel to handle notifications on kill
-    let controller = window?.rootViewController as? FlutterViewController
-    methodChannel = FlutterMethodChannel(name: "com.friend.ios/notifyOnKill", binaryMessenger: controller!.binaryMessenger)
+    methodChannel = FlutterMethodChannel(name: "com.friend.ios/notifyOnKill", binaryMessenger: messenger)
     methodChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleMethodCall(call, result: result)
     }
     
     // Create Apple Reminders method channel
-    appleRemindersChannel = FlutterMethodChannel(name: "com.omi.apple_reminders", binaryMessenger: controller!.binaryMessenger)
+    appleRemindersChannel = FlutterMethodChannel(name: "com.omi.apple_reminders", binaryMessenger: messenger)
     appleRemindersChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleRemindersCall(call, result: result)
     }
 
     #if !OMI_PERSONAL_LOCAL
     // Create Apple Health method channel
-    appleHealthChannel = FlutterMethodChannel(name: "com.omi.apple_health", binaryMessenger: controller!.binaryMessenger)
+    appleHealthChannel = FlutterMethodChannel(name: "com.omi.apple_health", binaryMessenger: messenger)
     appleHealthChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleHealthCall(call, result: result)
     }
     #endif
 
     // Create Speech Recognition method channel
-    let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: controller!.binaryMessenger)
+    let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: messenger)
     let speechHandler = SpeechRecognitionHandler()
     speechChannel.setMethodCallHandler { (call, result) in
         speechHandler.handle(call, result: result)
     }
 
     // TestFlight environment detection
-    let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: controller!.binaryMessenger)
+    let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: messenger)
     #if OMI_PERSONAL_LOCAL
     var localMacSettings: [String: String]? = nil
     let launchEnvironment = ProcessInfo.processInfo.environment
@@ -228,7 +222,7 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     // Audio session configuration for Bluetooth microphone support
-    let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller!.binaryMessenger)
+    let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: messenger)
     audioSessionChannel.setMethodCallHandler { (call, result) in
         if call.method == "configureForBluetooth" {
             let audioSession = AVAudioSession.sharedInstance()
@@ -250,11 +244,11 @@ final class QuickActionsIconPatcher: NSObject {
 
     #if !OMI_PERSONAL_LOCAL
     // Create WiFi Network plugin for device AP connection
-    _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
+    _ = WifiNetworkPlugin(messenger: messenger)
 
     // Battery widget channel — writes Omi device battery to the shared App Group
     // so the WidgetKit extension can read it.
-    let batteryWidgetChannel = FlutterMethodChannel(name: "com.omi.battery_widget", binaryMessenger: controller!.binaryMessenger)
+    let batteryWidgetChannel = FlutterMethodChannel(name: "com.omi.battery_widget", binaryMessenger: messenger)
     batteryWidgetChannel.setMethodCallHandler { (call, result) in
       let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")
       guard let args = call.arguments as? [String: Any] else {
@@ -288,60 +282,19 @@ final class QuickActionsIconPatcher: NSObject {
 
     #if !OMI_PERSONAL_LOCAL
       // CallKit/VoIP is intentionally absent from the Personal Team audio prototype.
-      OmiPhoneCallsPlugin.register(with: self.registrar(forPlugin: "OmiPhoneCallsPlugin")!)
+      OmiPhoneCallsPlugin.register(with: registry.registrar(forPlugin: "OmiPhoneCallsPlugin")!)
     #endif
 
-    // here, Without this code the task will not work.
-    SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
-      GeneratedPluginRegistrant.register(with: registry)
-    }
-    if #available(iOS 10.0, *) {
-      UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
-    }
-
-    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
-    if #available(iOS 13.0, *) {
-      // flutter_foreground_task registers an otherwise unused 25-second
-      // refresh. Clear requests left by older releases after plugin dispatch.
-      BGTaskScheduler.shared.cancel(
-        taskRequestWithIdentifier: AppDelegate.unusedForegroundTaskRefreshIdentifier
-      )
-    }
-    return launched
   }
 
-  override func applicationDidEnterBackground(_ application: UIApplication) {
-    super.applicationDidEnterBackground(application)
-    OmiBleManager.shared.markBackgroundTelemetryStart()
-    if #available(iOS 13.0, *) {
-      // The plugin delegate schedules this request from the super call above;
-      // cancel it after delegate dispatch so an idle app is not woken for an
-      // empty 25-second operation.
-      BGTaskScheduler.shared.cancel(
-        taskRequestWithIdentifier: AppDelegate.unusedForegroundTaskRefreshIdentifier
-      )
-    }
+  // The Meta AI registration callback arrives through SceneDelegate with UIScene.
+  func handleRayBanMetaURL(_ url: URL) -> Bool {
+    #if !OMI_PERSONAL_LOCAL
+    return rayBanMetaHostApi?.handleUrl(url) == true
+    #else
+    return false
+    #endif
   }
-
-  override func applicationDidBecomeActive(_ application: UIApplication) {
-    OmiBleManager.shared.markBackgroundTelemetryEnd()
-    super.applicationDidBecomeActive(application)
-  }
-
-  // Meta AI app calls back into this app to finish Ray-Ban Meta registration
-  // (AppLinkURLScheme in the MWDAT Info.plist dictionary).
-  #if !OMI_PERSONAL_LOCAL
-  override func application(
-    _ app: UIApplication,
-    open url: URL,
-    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
-  ) -> Bool {
-    if rayBanMetaHostApi?.handleUrl(url) == true {
-      return true
-    }
-    return super.application(app, open: url, options: options)
-  }
-  #endif
 
   private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
@@ -414,11 +367,6 @@ final class QuickActionsIconPatcher: NSObject {
       }
 
       completionHandler(exportedMappings.isEmpty ? .noData : .newData)
-  }
-
-  override func applicationWillEnterForeground(_ application: UIApplication) {
-    super.applicationWillEnterForeground(application)
-    OmiBleManager.shared.reconnectStalePeripherals()
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {

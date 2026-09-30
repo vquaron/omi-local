@@ -16,7 +16,12 @@ keys, certificates, or build artifacts.
   checks using the small dependency set used in CI.
 - `make test-offline`: local backend and services with full backend dependencies;
   includes importing the actual application and checking the offline route allowlist.
-- `make test-transport-app`: app tests and analyzer; requires Flutter.
+- `make test-transport-app`: app tests and analyzer; uses Flutter 3.47.4, matching CI.
+
+The canonical Flutter version is `environment.flutter` in `app/pubspec.yaml`
+(currently 3.47.4); CI and the iPhone preflight read it directly. From `app/`, run
+`flutter pub get --enforce-lockfile` to verify the SDK and locked packages agree.
+When upgrading Flutter, update that version and the lock together and rerun the app checks.
 
 To reproduce transport-unit CI, use a separate Python 3.11 environment:
 `python -m pip install -r .github/requirements-transport.txt`, then

@@ -116,7 +116,8 @@ class Runtime:
                 current = self._preview()
             except (httpx.HTTPError, OSError, ValueError, KeyError):
                 current = {'backend': 'unavailable', 'capture': {'state': 'unknown'},
-                           'live_transcript': {'state': 'unavailable', 'updates': 0}, 'sessions': []}
+                           'live_transcript': {'state': 'unavailable', 'updates': 0},
+                           'diarization': {'state': 'unavailable', 'labeled_segments': 0}, 'sessions': []}
             try:
                 current['final_stt'] = self._final()
                 live = self._settings('live-stt.json')

@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/validate_mobile_build_config_test.sh"
-"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/mobile_build_wrapper_test.sh"
-
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
+
+(source ./setup.sh; check_flutter_version)
+"$ROOT_DIR/scripts/validate_mobile_build_config_test.sh"
+"$ROOT_DIR/scripts/mobile_build_wrapper_test.sh"
+flutter pub get --enforce-lockfile
 
 missing_files=()
 required_files=(
@@ -13,6 +15,7 @@ required_files=(
   "lib/firebase_options_prod.dart"
   "lib/env/dev_env.g.dart"
   "lib/env/prod_env.g.dart"
+  "lib/utils/manifest/manifest.g.dart"
 )
 
 for file in "${required_files[@]}"; do
@@ -49,8 +52,7 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   echo "USE_WEB_AUTH=true" >> .dev.env
   echo "USE_AUTH_CUSTOM_TOKEN=true" >> .dev.env
 
-  flutter pub get
   flutter pub run build_runner build --delete-conflicting-outputs
 fi
 
-flutter test "$@"
+flutter test --no-pub "$@"

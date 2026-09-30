@@ -42,7 +42,7 @@ inside the containers. Installing the iPhone app still requires a Mac with Xcode
 | iPhone | The local Omi app, installed separately |
 | Recording device | Omi CV1 |
 | Transport | Tailscale on the server and iPhone; optional ngrok |
-| iOS development | Flutter 3.44.5 or later, CocoaPods, and an Apple account for signing |
+| iOS development | Flutter 3.47.4, CocoaPods, and an Apple account for signing |
 | Initial setup | Internet access for dependencies and models; at least 4 GiB of free space for model preparation |
 
 The Mac must remain awake while receiving recordings. A free Apple Personal Team
@@ -88,8 +88,11 @@ the ngrok authtoken; the authtoken stays on the Mac.
 
 ### 3. Record and browse
 
-Connect your CV1 in the iPhone app. Press the CV1 button once to start a recording
-and again to finish it. Muting temporarily pauses audio within the same session.
+Connect your CV1 in the iPhone app to start recording automatically. Recording
+resumes after a Bluetooth reconnect unless you explicitly stopped or muted it.
+The CV1 button and app controls still start/stop recording. The server saves
+five-minute audio parts for transcription while the input continues. Saved parts
+remain visible in Conversations while queued, processing, or failed.
 
 After setup, open the library from any directory in Terminal:
 

@@ -211,6 +211,19 @@ class _LocalRuntimeStatusCardState extends State<LocalRuntimeStatusCard> with Wi
         null => context.l10n.unknown,
       };
 
+  String _diarizationText(BuildContext context) => switch (_status?.diarizationState) {
+        LocalDiarizationState.disabled => context.l10n.off,
+        LocalDiarizationState.ready => context.l10n.modelReady,
+        LocalDiarizationState.busy => context.l10n.processing,
+        LocalDiarizationState.pending => context.l10n.waitingForData,
+        LocalDiarizationState.labeled => context.l10n.nProcessed(_status!.labeledSegments),
+        LocalDiarizationState.degraded ||
+        LocalDiarizationState.failed ||
+        LocalDiarizationState.unavailable =>
+          context.l10n.cancelConsequenceSpeakers,
+        LocalDiarizationState.unknown || null => context.l10n.unknown,
+      };
+
   Widget _row(String name, String title, String value, IconData icon) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -275,6 +288,7 @@ class _LocalRuntimeStatusCardState extends State<LocalRuntimeStatusCard> with Wi
               _row('connection', context.l10n.localMacTitle, _connectionText(context), Icons.computer),
               _row('audio', context.l10n.audioDataReceived, _audioText(context), Icons.graphic_eq),
               _row('transcript', context.l10n.realtimeTranscript, _transcriptText(context), Icons.subtitles_outlined),
+              _row('diarization', context.l10n.instantSpeakerLabels, _diarizationText(context), Icons.people_outline),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(

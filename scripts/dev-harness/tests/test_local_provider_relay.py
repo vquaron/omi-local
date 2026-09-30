@@ -84,10 +84,14 @@ def test_real_asgi_relay_pins_key_preserves_corrections_and_drains(cfg):
         provider = Provider()
         connections.append((endpoint, key, provider))
         return provider
-    with TestClient(relay.create_app(cfg, registry=registry, connector=connect), client=('127.0.0.1', 1234)) as client:
+    async def health_probe(*a, **kw):
+        return {'state': 'ready'}
+    with TestClient(relay.create_app(cfg, registry=registry, connector=connect, health_probe=health_probe), client=('127.0.0.1', 1234)) as client:
         with client.websocket_connect('/asr') as socket:
             assert socket.receive_json()['useAudioWorklet'] is True
-            assert client.get('/health').json()['active_sessions'] == 1
+            health = client.get('/health').json()
+            assert health['active_sessions'] == 1
+            assert health['diarization'] == {'state': 'ready'}
             with pytest.raises(relay.RelayError, match='Stop recording'):
                 with relay.session_gate(cfg, exclusive=True):
                     pass
@@ -100,7 +104,7 @@ def test_real_asgi_relay_pins_key_preserves_corrections_and_drains(cfg):
             assert corrected == {'lines': [], 'buffer_transcription': 'corrected', 'diarization_status': 'degraded'}
             assert socket.receive_json() == {'type': 'ready_to_stop'}
         assert connections[0][:2] == ('wss://speech.example/asr', 'synthetic-bearer')
-        assert registry.lookups == ['synthetic-key-ref']
+        assert registry.lookups == ['synthetic-key-ref', 'synthetic-key-ref']
         assert connections[0][2].sent == [b'\x01\x00' * 100, b'']
         with client.websocket_connect('/asr') as socket:
             socket.receive_json()
@@ -108,7 +112,7 @@ def test_real_asgi_relay_pins_key_preserves_corrections_and_drains(cfg):
             socket.receive_json()
             socket.receive_json()
         assert connections[1][0] == 'wss://next.example/asr'
-        assert registry.lookups == ['synthetic-key-ref', 'changed-ref']
+        assert registry.lookups == ['synthetic-key-ref', 'synthetic-key-ref', 'changed-ref']
 
 
 def test_disabled_handshake_never_resolves_key_or_opens_upstream(cfg):
@@ -328,3 +332,41 @@ def test_activation_rolls_back_under_gate_after_backend_failure(cfg, monkeypatch
     with pytest.raises(services.ActivationIndeterminate, match='indeterminate') as error:
         services.activate(cfg, None, publish=lambda: events.append('publish'), rollback=rollback)
     assert events == ['publish', 'rollback'] and 'private' not in str(error.value)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('body,status,expected', [
+    ({'ready': True, 'active': False, 'diarization': True}, 200, 'ready'),
+    ({'ready': True, 'active': True, 'diarization': True}, 200, 'busy'),
+    ({'ready': True, 'active': False, 'busy': True, 'diarization': True}, 200, 'busy'),
+    ({'ready': True, 'active': False, 'busy': True, 'diarization': False}, 200, 'disabled'),
+    ({'ready': True, 'active': False, 'busy': 'false', 'diarization': True}, 200, 'unknown'),
+    ({'ready': True, 'active': False, 'diarization': False}, 200, 'disabled'),
+    ({'ready': True, 'active': False}, 200, 'unknown'),
+    ({'ready': False, 'diarization': True}, 200, 'unavailable'),
+    ({'ready': True}, 302, 'unavailable'),
+    ({'padding': 'x' * 5000}, 200, 'unavailable'),
+])
+async def test_selected_diarization_health_is_bounded_and_does_not_redirect(cfg, monkeypatch, body, status, expected):
+    factory = httpx.AsyncClient
+    def respond(request):
+        assert str(request.url) == 'https://speech.example/health'
+        assert request.headers['authorization'] == 'Bearer synthetic-key'
+        return httpx.Response(status, json=body, headers={'Location': 'https://unselected.example'})
+    def client(**kwargs):
+        assert kwargs['trust_env'] is False and kwargs['follow_redirects'] is False
+        return factory(transport=httpx.MockTransport(respond), **kwargs)
+    monkeypatch.setattr(relay.httpx, 'AsyncClient', client)
+    assert await relay.diarization_health(profile(), cfg, key='synthetic-key') == {'state': expected}
+
+
+@pytest.mark.anyio
+async def test_local_diarization_health_does_not_receive_remote_credentials(cfg, monkeypatch):
+    factory = httpx.AsyncClient
+    def respond(request):
+        assert str(request.url) == 'http://127.0.0.1:18091/health'
+        assert 'authorization' not in request.headers
+        raise httpx.ConnectError('synthetic private error')
+    monkeypatch.setattr(relay.httpx, 'AsyncClient', lambda **kw: factory(transport=httpx.MockTransport(respond), **kw))
+    selected = profile(diarization={'enabled': True, 'port': 18091})
+    assert await relay.diarization_health(selected, cfg, key='synthetic-key') == {'state': 'unavailable'}

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:omi/env/env.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -267,6 +269,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   Map<DateTime, List<CalendarCaptureGap>> _captureGapsByDate = const {};
   String? _captureGapsSpanKey;
   bool _captureGapsRequestInFlight = false;
+  Timer? _localRecordingRefresh;
 
   void _refreshGoals() {}
 
@@ -281,6 +284,20 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   @override
   void initState() {
     super.initState();
+    if (Env.isOfflineRuntime) {
+      _localRecordingRefresh = Timer.periodic(const Duration(seconds: 5), (_) async {
+        if (!mounted ||
+            WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+            context.read<HomeProvider>().selectedIndex != 0 ||
+            ModalRoute.of(context)?.isCurrent != true) {
+          return;
+        }
+        final provider = context.read<ConversationProvider>();
+        if (!provider.isLoadingConversations && !provider.hasActiveSearch) {
+          await provider.forceRefreshConversations();
+        }
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final conversationProvider = context.read<ConversationProvider>();
@@ -446,6 +463,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    _localRecordingRefresh?.cancel();
     _scrollController.dispose();
     super.dispose();
   }

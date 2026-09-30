@@ -1718,12 +1718,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'อุปกรณ์',
-      one: 'อุปกรณ์',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'อุปกรณ์', one: 'อุปกรณ์');
     return 'พบ $count $_temp0 ในบริเวณใกล้เคียง';
   }
 
@@ -9163,11 +9158,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'การบันทึก $count รายการพร้อมซิงค์',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'การบันทึก $count รายการพร้อมซิงค์');
     return '$_temp0';
   }
 
@@ -9179,11 +9170,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'การบันทึก $count รายการต้องการความสนใจ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'การบันทึก $count รายการต้องการความสนใจ');
     return '$_temp0';
   }
 
@@ -9756,12 +9743,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String monthsFreeBadge(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ฟรี $count เดือน',
-      one: 'ฟรี 1 เดือน',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ฟรี $count เดือน', one: 'ฟรี 1 เดือน');
     return '$_temp0';
   }
 

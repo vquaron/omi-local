@@ -10,6 +10,8 @@ enum LocalCaptureState { idle, waitingAudio, received, decodeError }
 
 enum LocalLiveTranscriptState { disabled, unavailable, ready, busy, streaming, failed }
 
+enum LocalDiarizationState { unknown, disabled, unavailable, ready, busy, pending, labeled, degraded, failed }
+
 class LocalRuntimeStatusUnavailable implements Exception {}
 
 /// Aggregate evidence from the Mac, never inferred from a phone socket state.
@@ -20,6 +22,8 @@ class LocalRuntimeStatus {
     required this.framesReceived,
     required this.liveTranscriptState,
     required this.transcriptUpdates,
+    this.diarizationState = LocalDiarizationState.unknown,
+    this.labeledSegments = 0,
   });
 
   final LocalCaptureState captureState;
@@ -27,6 +31,8 @@ class LocalRuntimeStatus {
   final int framesReceived;
   final LocalLiveTranscriptState liveTranscriptState;
   final int transcriptUpdates;
+  final LocalDiarizationState diarizationState;
+  final int labeledSegments;
 
   factory LocalRuntimeStatus.fromJson(Object? value) {
     const invalid = FormatException('Invalid local runtime status');
@@ -50,6 +56,28 @@ class LocalRuntimeStatus {
       'failed' => LocalLiveTranscriptState.failed,
       _ => throw invalid,
     };
+    // Older servers omit this field. Absence is unknown, never disabled/healthy.
+    final diarization = value['diarization'];
+    var diarizationState = LocalDiarizationState.unknown;
+    var labeledSegments = 0;
+    if (diarization != null) {
+      if (diarization is! Map<String, dynamic>) throw invalid;
+      diarizationState = switch (diarization['state']) {
+        'disabled' => LocalDiarizationState.disabled,
+        'unavailable' => LocalDiarizationState.unavailable,
+        'ready' => LocalDiarizationState.ready,
+        'busy' => LocalDiarizationState.busy,
+        'pending' => LocalDiarizationState.pending,
+        'labeled' => LocalDiarizationState.labeled,
+        'degraded' => LocalDiarizationState.degraded,
+        'failed' => LocalDiarizationState.failed,
+        _ => LocalDiarizationState.unknown,
+      };
+      final count = diarization['labeled_segments'];
+      if (count is! int || count < 0) throw invalid;
+      labeledSegments = count;
+      if (diarizationState == LocalDiarizationState.labeled && count == 0) throw invalid;
+    }
     final seconds = capture['audio_seconds'];
     final frames = capture['frames_received'];
     final updates = live['updates'];
@@ -68,6 +96,8 @@ class LocalRuntimeStatus {
       framesReceived: frames,
       liveTranscriptState: liveState,
       transcriptUpdates: updates,
+      diarizationState: diarizationState,
+      labeledSegments: labeledSegments,
     );
   }
 }

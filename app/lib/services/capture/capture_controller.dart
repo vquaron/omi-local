@@ -523,6 +523,7 @@ class CaptureController extends ChangeNotifier
   LocalOmiButtonAction? _localOmiButtonFeedback;
   LocalOmiButtonAction? get localOmiButtonFeedback => _localOmiButtonFeedback;
   Timer? _localButtonFeedbackTimer;
+  Timer? _localButtonEventTimer;
 
   void _showLocalButtonFeedback(LocalOmiButtonAction action, int generation) {
     if (!TemporaryCaptureControls.enabled || generation != _buttonStreamGeneration) return;
@@ -660,7 +661,15 @@ class CaptureController extends ChangeNotifier
       recordingState = RecordingState.stop;
     }
     if (_recordingDevice?.id != device?.id) {
+      if (TemporaryCaptureControls.enabled && !isPhoneMicSelected) {
+        _temporaryRecordingRequested = false;
+        _websocketInitGeneration++;
+        unawaited(_bleBytesStream?.cancel());
+        _bleBytesStream = null;
+        recordingState = RecordingState.stop;
+      }
       _lastOmiButtonEvent = null;
+      _localButtonEventTimer?.cancel();
       _localButtonFeedbackTimer?.cancel();
       _localOmiButtonFeedback = null;
       _localButtonAction = null;
@@ -985,6 +994,9 @@ class CaptureController extends ChangeNotifier
     _socket = socket;
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
+    if (recordingState == RecordingState.interrupted && !_micInterrupted && _phoneStop == null) {
+      updateRecordingState(RecordingState.record);
+    }
     if (_sessionStartSeconds == 0) {
       _sessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     }
@@ -1137,6 +1149,11 @@ class CaptureController extends ChangeNotifier
           final event = OmiButtonEvent.fromCode(buttonState);
           if (event == null) return;
           _lastOmiButtonEvent = event;
+          _localButtonEventTimer?.cancel();
+          _localButtonEventTimer = Timer(const Duration(seconds: 4), () {
+            _lastOmiButtonEvent = null;
+            notifyListeners();
+          });
           notifyListeners();
           if (event == OmiButtonEvent.singleTap) {
             unawaited(_toggleLocalRecordingSession(deviceId));
@@ -1284,6 +1301,10 @@ class CaptureController extends ChangeNotifier
     _startMetricsTracking();
     final audioGeneration = _localAudioGeneration;
     void receive(List<int> value) {
+      if (TemporaryCaptureControls.enabled &&
+          (audioGeneration != _localAudioGeneration || _recordingDevice?.id != deviceId)) {
+        return;
+      }
       final snapshot = List<int>.from(value);
       if (snapshot.isEmpty || snapshot.length < 3) return;
       if (snapshot.length > 3) _receiveLocalAudioEvidence(audioGeneration);
@@ -1385,7 +1406,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    if (_audioCodecLoader != null) return _audioCodecLoader!(deviceId);
+    if (_audioCodecLoader != null) return _audioCodecLoader(deviceId);
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return BleAudioCodec.pcm8;
@@ -1405,7 +1426,7 @@ class CaptureController extends ChangeNotifier
     String deviceId, {
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
-    if (_audioListenerLoader != null) return _audioListenerLoader!(deviceId, onAudioBytesReceived);
+    if (_audioListenerLoader != null) return _audioListenerLoader(deviceId, onAudioBytesReceived);
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return Future.value(null);
@@ -1417,7 +1438,7 @@ class CaptureController extends ChangeNotifier
     String deviceId, {
     required void Function(List<int>) onButtonReceived,
   }) async {
-    if (_buttonListenerLoader != null) return _buttonListenerLoader!(deviceId, onButtonReceived);
+    if (_buttonListenerLoader != null) return _buttonListenerLoader(deviceId, onButtonReceived);
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return Future.value(null);
@@ -1773,6 +1794,7 @@ class CaptureController extends ChangeNotifier
   @override
   void dispose() {
     _localButtonFeedbackTimer?.cancel();
+    _localButtonEventTimer?.cancel();
     _resetLocalAudioEvidence();
     _localDeviceAudioStart?.discard();
     _websocketInitGeneration++;
@@ -2179,6 +2201,12 @@ class CaptureController extends ChangeNotifier
   }
 
   // Temporary explicit session boundary for the local WAV workflow (G12).
+  // A transport disconnect is not a user Stop. Remember that distinction
+  // across BLE reconnects, including a disconnect during startup.
+  bool _localRecordingStoppedByUser = false;
+  bool get shouldAutomaticallyStartDeviceRecording =>
+      TemporaryCaptureControls.enabled && !isPhoneMicSelected && !_isPaused && !_localRecordingStoppedByUser;
+
   bool _temporaryRecordingRequested = false;
   LocalDeviceAudioStart? _localDeviceAudioStart;
   Future<void>? _localDeviceStop;
@@ -2187,10 +2215,12 @@ class CaptureController extends ChangeNotifier
   Future streamDeviceRecording({BtDevice? device, bool userInitiated = false}) async {
     Logger.debug("streamDeviceRecording $device");
     if (userInitiated) {
+      _localRecordingStoppedByUser = false;
       if (isPhoneMicSelected || _phoneStart != null || _phoneStop != null) {
         await stopStreamRecording(reason: 'source_changed');
       }
       _localInputSource = ConversationSource.omi;
+      _localRecordingStoppedByUser = false;
       await _localDeviceStop;
       await _localDeviceAudioStart?.completed.future;
     }
@@ -2288,6 +2318,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
+    if (TemporaryCaptureControls.enabled && !cleanDevice) _localRecordingStoppedByUser = true;
     if (isPhoneMicSelected && _localDeviceAudioStart == null && !_temporaryRecordingRequested) {
       if (cleanDevice) _updateRecordingDevice(null);
       return;
@@ -2561,7 +2592,7 @@ class CaptureController extends ChangeNotifier
       await _drainNativeBleTranscriptMessages();
       if (segments.isEmpty && photos.isEmpty) {
         if (_inProgressConversationLoader != null) {
-          await _inProgressConversationLoader!();
+          await _inProgressConversationLoader();
         } else {
           await _loadInProgressConversation();
         }
@@ -3058,7 +3089,7 @@ class CaptureController extends ChangeNotifier
       unawaited(_conversationLocationCapture.captureAndUpload());
       try {
         if (_inProgressConversationLoader != null) {
-          await _inProgressConversationLoader!();
+          await _inProgressConversationLoader();
         } else {
           await _loadInProgressConversation();
         }

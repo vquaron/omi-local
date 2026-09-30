@@ -1,66 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/l10n/app_localizations.dart';
 
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 
 void main() {
-  group('ProcessingConversationWidget shimmer optimization', () {
-    testWidgets('uses single Shimmer wrapper instead of multiple', (tester) async {
-      // Create a minimal mock conversation for testing
-      // Note: We can't fully instantiate ProcessingConversationWidget without
-      // extensive mocking, so we test the shimmer consolidation pattern directly
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: RepaintBoundary(
-              child: Shimmer.fromColors(
-                baseColor: const Color(0xFF2A2A32),
-                highlightColor: const Color(0xFF3D3D47),
-                child: const Column(
-                  children: [
-                    // Multiple placeholder elements under single Shimmer
-                    SizedBox(width: 24, height: 24),
-                    SizedBox(width: 50, height: 14),
-                    SizedBox(width: 100, height: 16),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      // Should have exactly ONE Shimmer widget (optimization: consolidated)
-      expect(find.byType(Shimmer), findsOneWidget);
-
-      // Should have RepaintBoundary for isolation
-      expect(find.byType(RepaintBoundary), findsWidgets);
-    });
-
-    testWidgets('RepaintBoundary isolates shimmer from parent repaints', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: RepaintBoundary(
-              key: const Key('testBoundary'),
-              child: Shimmer.fromColors(
-                baseColor: const Color(0xFF2A2A32),
-                highlightColor: const Color(0xFF3D3D47),
-                child: Container(width: 100, height: 100),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      // Our test RepaintBoundary should be present
-      final repaintBoundary = find.byKey(const Key('testBoundary'));
-      expect(repaintBoundary, findsOneWidget);
-
-      // Shimmer should be a descendant of our RepaintBoundary
-      expect(find.descendant(of: repaintBoundary, matching: find.byType(Shimmer)), findsOneWidget);
-    });
+  testWidgets('every saved recording has a dated card while transcription is pending or failed', (tester) async {
+    final pending = ServerConversation(
+      id: 'pending',
+      createdAt: DateTime(2026, 9, 17, 12, 15),
+      structured: Structured('Local recording', ''),
+      status: ConversationStatus.processing,
+      source: ConversationSource.omi,
+      externalIntegration:
+          ConversationExternalData(text: '', localRecording: {'status': 'pending', 'duration_seconds': 300}),
+    );
+    final failed = ServerConversation(
+      id: 'failed',
+      createdAt: DateTime(2026, 9, 17, 12, 20),
+      structured: Structured('Local recording', ''),
+      status: ConversationStatus.processing,
+      source: ConversationSource.phone,
+      externalIntegration:
+          ConversationExternalData(text: '', localRecording: {'status': 'failed', 'duration_seconds': 65}),
+    );
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('en'),
+      home: Scaffold(
+          body: CustomScrollView(slivers: [
+        getProcessingConversationsWidget([pending, failed])
+      ])),
+    ));
+    expect(find.text('Omi · Saved'), findsOneWidget);
+    expect(find.text('Microphone · Saved'), findsOneWidget);
+    expect(find.textContaining('5:00\nPending'), findsOneWidget);
+    expect(find.textContaining('1:05\nTranscription failed'), findsOneWidget);
+    expect(find.textContaining('12:15'), findsOneWidget);
+    expect(ConversationExternalData.fromJson(pending.externalIntegration!.toJson()).localRecording,
+        pending.externalIntegration!.localRecording);
+    await tester.tap(find.text('Omi · Saved'));
+    await tester.pump();
+    expect(find.byType(ProcessingConversationWidget), findsNWidgets(2));
   });
 
   group('RecordingStatusIndicator', () {

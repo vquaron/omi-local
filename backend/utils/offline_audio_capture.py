@@ -189,6 +189,22 @@ class OfflineAudioCapture:
         return metadata
 
 
+
+# Finish bounded files for the watcher while the listen socket and input stay live.
+# A boundary falls between decoded packets, so no samples are discarded or repeated.
+CAPTURE_CHUNK_SECONDS = 5 * 60
+
+
+def rotate_offline_audio_capture(capture: OfflineAudioCapture) -> OfflineAudioCapture:
+    if capture.decoded_pcm_bytes < CAPTURE_CHUNK_SECONDS * OUTPUT_SAMPLE_RATE * OUTPUT_SAMPLE_WIDTH_BYTES:
+        return capture
+    capture.finalize()
+    return OfflineAudioCapture(
+        session_id=str(uuid.uuid4()), input_codec=capture.input_codec,
+        source=capture.source, root=capture.session_dir.parent.parent,
+    )
+
+
 def create_offline_audio_capture(
     *,
     session_id: str,

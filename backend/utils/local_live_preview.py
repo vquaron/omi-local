@@ -155,9 +155,26 @@ class LocalLivePreview:
         self.disabled = False
         self.updates = 0
         self.eof_ack = False
+        self.diarization_capability = None
         self.unavailable_reason = unavailable_reason
         self.failure_status_task = None
         self.task = create_named_task(self._run(), name='local-preview-session')
+
+    @property
+    def diarization_status(self):
+        """Current session evidence; ordinary ASR placeholders never count."""
+        state, labeled = 'unknown', 0
+        if self.disabled or self.diarization_capability is False:
+            state = 'disabled'
+        elif self.failed:
+            state = 'failed'
+        elif self.diarization_capability is True:
+            if not self.segment.diarization:
+                state = 'degraded'
+            else:
+                labeled = sum(row['speaker'] is not None for row in self.segment.segments)
+                state = 'labeled' if labeled else 'pending'
+        return {'state': state, 'labeled_segments': labeled}
 
     @classmethod
     def from_environment(cls, send_segments):
@@ -264,6 +281,7 @@ class LocalLivePreview:
                 if config.get('enabled') is False:
                     self.disabled = True
                     return
+                self.diarization_capability = config.get('diarization') if type(config.get('diarization')) is bool else None
                 self.segment.configure(config)
                 if self.failed:
                     return

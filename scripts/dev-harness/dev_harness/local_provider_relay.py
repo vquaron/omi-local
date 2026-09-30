@@ -5,6 +5,8 @@ import copy
 import fcntl
 import json
 import os
+
+import httpx
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -177,7 +179,36 @@ async def relay_session(downstream, snapshot, cfg, *, key='', raw_upstream=False
                     task.result()
 
 
-def create_app(cfg, *, registry=None, connector=connect):
+async def diarization_health(snapshot, cfg, *, key=''):
+    endpoint, use_key = upstream(snapshot, cfg)
+    parsed = urlsplit(endpoint)
+    target = parsed._replace(scheme='https' if parsed.scheme == 'wss' else 'http', path='/health').geturl()
+    try:
+        async with asyncio.timeout(0.6):
+            async with httpx.AsyncClient(trust_env=False, follow_redirects=False, timeout=0.5,
+                                         headers=auth_headers(key if use_key else '')) as client:
+                async with client.stream('GET', target) as response:
+                    if response.status_code != 200:
+                        return {'state': 'unavailable'}
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=4097):
+                        body.extend(chunk)
+                        if len(body) > 4096:
+                            return {'state': 'unavailable'}
+                    data = json.loads(body)
+        if not isinstance(data, dict) or data.get('ready') is not True:
+            return {'state': 'unavailable'}
+        if data.get('diarization') is False:
+            return {'state': 'disabled'}
+        if (data.get('diarization') is not True or type(data.get('active')) is not bool
+                or type(data.get('busy', False)) is not bool):
+            return {'state': 'unknown'}
+        return {'state': 'busy' if data['active'] or data.get('busy', False) else 'ready'}
+    except (TimeoutError, httpx.HTTPError, OSError, ValueError):
+        return {'state': 'unavailable'}
+
+
+def create_app(cfg, *, registry=None, connector=connect, health_probe=diarization_health):
     from fastapi import FastAPI, WebSocket
     from fastapi.responses import JSONResponse
     if registry is None:
@@ -190,8 +221,12 @@ def create_app(cfg, *, registry=None, connector=connect):
     async def health():
         try:
             snapshot = await asyncio.to_thread(registry.snapshot, 'live')
+            diarization = {'state': 'disabled'}
+            if snapshot is not None:
+                key = await asyncio.to_thread(registry.key, snapshot)
+                diarization = await health_probe(snapshot, cfg, key=key)
             return {'ready': True, 'active': bool(active), 'active_sessions': active,
-                    'enabled': snapshot is not None, 'relay': True}
+                    'enabled': snapshot is not None, 'relay': True, 'diarization': diarization}
         except Exception:
             return JSONResponse({'ready': False, 'active': bool(active), 'relay': True}, status_code=503)
 

@@ -251,3 +251,34 @@ def test_failed_recovery_leaves_original_part_untouched(tmp_path: Path) -> None:
 
     assert capture.pcm_part_path.read_bytes() == original
     assert not (capture.session_dir / WAV_NAME).exists()
+
+
+@pytest.mark.parametrize(('source', 'codec'), [('omi', 'opus_fs320'), ('phone', 'pcm16')])
+def test_continuous_capture_rotates_finished_files_without_losing_pcm(tmp_path, source, codec):
+    from utils.offline_audio_capture import rotate_offline_audio_capture
+
+    with _offline_storage(tmp_path) as root:
+        sink = create_offline_audio_capture(
+            session_id=str(uuid.uuid4()), source=source, input_codec=codec, sample_rate=16000, channels=1)
+        folders = [sink.session_dir]
+        expected = []
+        # Seven minutes of decoded input, accelerated. Silence is audio too.
+        for minute in range(7):
+            pcm = bytes([minute, 0]) * (16000 * 60)
+            expected.append(pcm)
+            previous = sink
+            sink = rotate_offline_audio_capture(sink)
+            if sink is not previous:
+                assert (previous.session_dir / METADATA_NAME).is_file()
+                folders.append(sink.session_dir)
+            sink.record_decoded_frame(encoded_bytes=len(pcm), pcm=pcm)
+        sink.finalize()
+        assert len(folders) == 2
+        actual = []
+        for folder in folders:
+            metadata = json.loads((folder / METADATA_NAME).read_text())
+            assert metadata['status'] == 'completed'
+            with wave.open(str(folder / WAV_NAME), 'rb') as wav:
+                actual.append(wav.readframes(wav.getnframes()))
+        assert b''.join(actual) == b''.join(expected)
+        assert [json.loads((f / METADATA_NAME).read_text())['duration_seconds'] for f in folders] == [300, 120]

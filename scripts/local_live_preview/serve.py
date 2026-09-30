@@ -27,6 +27,16 @@ def deny_network(event, args):
         raise PermissionError('Live preview has no outbound network access')
 
 
+def inference_busy(lock_path):
+    """Observe admission using a separate descriptor; never unlock a live session."""
+    with lock_path.open('r+') as observer:
+        try:
+            fcntl.flock(observer, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        return False  # Closing this descriptor releases only this probe's lock.
+
+
 def snapshot_with_words(response):
     """Expose WLK's existing absolute word times for independent diarization.
 
@@ -163,7 +173,8 @@ def main():
 
         @app.get('/health')
         async def health():
-            return {'ready': True, 'active': active, 'completed': completed, 'last': last,
+            return {'ready': True, 'diarization': False, 'active': active,
+                    'busy': active or inference_busy(args.inference_lock), 'completed': completed, 'last': last,
                     'profile': f'turbo-q4-{args.language}-localagreement', 'chunk_s': args.chunk_seconds, 'mlx_cache_limit_bytes': 256 * 2**20}
 
         @app.websocket('/asr')
