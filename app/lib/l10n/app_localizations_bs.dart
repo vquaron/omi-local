@@ -9978,4 +9978,74 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get localMacServers => 'Sačuvani serveri';
+
+  @override
+  String get liveTranslation => 'Prevođenje uživo';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Prevedi na';
+
+  @override
+  String get liveTranslationHelp =>
+      'Povezani server prikazuje prijevod ispod originala. Automatski se koristi model za sažimanje, osim ako odaberete drugi u biblioteci servera: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Na povezanom serveru nije podešen model za prevođenje. Otvorite njegovu biblioteku: Settings → Summarization ili Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Prevođenje nije dostupno na povezanom serveru. Provjerite njegovu biblioteku: Settings → Translation.';
+
+  @override
+  String get diarization => 'Dijarizacija';
+
+  @override
+  String get providerUnavailable => 'Server nije dostupan';
+
+  @override
+  String get providerMisconfigured => 'Provjerite postavke pružaoca';
+
+  @override
+  String speakersCount(int count) {
+    return '$count govornika';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Dijarizacija nije izvršena';
+
+  @override
+  String get diarizationFailed => 'Dijarizacija nije uspjela';
+
+  @override
+  String get localProcessingHelp =>
+      'Oznake govornika uživo dolaze od Live pružaoca usluge. Dijarizacija ispod obrađuje završene snimke.';
+
+  @override
+  String get localProcessingApplyHelp => 'Zaustavite snimanje prije prebacivanja. Odabrani serveri primaju vaš zvuk.';
+
+  @override
+  String get localProcessingKeyHelp => 'Prazno polje zadržava sačuvani ključ. Drugi server zahtijeva svoj ključ.';
+
+  @override
+  String get localProcessingUnsupported => 'Ažurirajte upareni server da uredite ove postavke.';
+
+  @override
+  String get localProcessingFinished => 'Završeni snimci';
+
+  @override
+  String get localProcessingProbe => 'Provjeri vezu';
+
+  @override
+  String get localProcessingPending => 'Sačuvane promjene nisu aktivne. Dodirnite Potvrdi da ih primijenite.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Ažurirajte server za sinhronizaciju zvuka. Zvuk sačuvan na telefonu ostaje sačuvan.';
+
+  @override
+  String get liveTranslationBidirectional => 'Dvosmjerni prijevod';
+
+  @override
+  String get liveTranslationPairHelp => 'Prepoznaj jezik svake rečenice i prevedi je na drugi odabrani jezik.';
 }

@@ -10024,4 +10024,76 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get localMacServers => 'Αποθηκευμένοι διακομιστές';
+
+  @override
+  String get liveTranslation => 'Ζωντανή μετάφραση';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Μετάφραση σε';
+
+  @override
+  String get liveTranslationHelp =>
+      'Ο συνδεδεμένος διακομιστής εμφανίζει τη μετάφραση κάτω από το πρωτότυπο. Χρησιμοποιείται αυτόματα το μοντέλο σύνοψης, εκτός αν επιλέξετε άλλο στη βιβλιοθήκη του: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Δεν έχει ρυθμιστεί μοντέλο μετάφρασης στον συνδεδεμένο διακομιστή. Ανοίξτε τη βιβλιοθήκη του: Settings → Summarization ή Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Η μετάφραση δεν είναι διαθέσιμη στον συνδεδεμένο διακομιστή. Ελέγξτε τη βιβλιοθήκη του: Settings → Translation.';
+
+  @override
+  String get diarization => 'Διαχωρισμός ομιλητών';
+
+  @override
+  String get providerUnavailable => 'Ο διακομιστής δεν είναι διαθέσιμος';
+
+  @override
+  String get providerMisconfigured => 'Ελέγξτε τις ρυθμίσεις του παρόχου';
+
+  @override
+  String speakersCount(int count) {
+    return '$count ομιλητές';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Ο διαχωρισμός ομιλητών δεν εκτελέστηκε';
+
+  @override
+  String get diarizationFailed => 'Ο διαχωρισμός ομιλητών απέτυχε';
+
+  @override
+  String get localProcessingHelp =>
+      'Οι ζωντανές ετικέτες ομιλητών προέρχονται από τον πάροχο Live. Η διαχωριστική αναγνώριση ομιλητών παρακάτω επεξεργάζεται ολοκληρωμένες εγγραφές.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'Σταματήστε την εγγραφή πριν από την αλλαγή. Οι επιλεγμένοι διακομιστές λαμβάνουν τον ήχο σας.';
+
+  @override
+  String get localProcessingKeyHelp =>
+      'Το κενό πεδίο διατηρεί το αποθηκευμένο κλειδί. Ένας άλλος διακομιστής απαιτεί δικό του κλειδί.';
+
+  @override
+  String get localProcessingUnsupported => 'Ενημερώστε τον συζευγμένο διακομιστή για να αλλάξετε αυτές τις ρυθμίσεις.';
+
+  @override
+  String get localProcessingFinished => 'Ολοκληρωμένες εγγραφές';
+
+  @override
+  String get localProcessingProbe => 'Δοκιμή σύνδεσης';
+
+  @override
+  String get localProcessingPending => 'Οι αποθηκευμένες αλλαγές δεν είναι ενεργές. Πατήστε Επιβεβαίωση για εφαρμογή.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Ενημερώστε τον διακομιστή για συγχρονισμό ήχου. Ο ήχος που έχει αποθηκευτεί στο τηλέφωνο διατηρείται.';
+
+  @override
+  String get liveTranslationBidirectional => 'Αμφίδρομη μετάφραση';
+
+  @override
+  String get liveTranslationPairHelp => 'Αναγνώριση της γλώσσας κάθε φράσης και μετάφραση στην άλλη επιλεγμένη γλώσσα.';
 }

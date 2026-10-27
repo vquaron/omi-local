@@ -8,6 +8,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,27 @@ from urllib.parse import urlsplit
 
 class TransportError(ValueError):
     pass
+
+
+def normalize_https_url(value):
+    """Validate a paired HTTPS origin without importing runtime dependencies."""
+    try:
+        uri = urlsplit(value.strip())
+        invalid = (uri.scheme != 'https' or not uri.hostname or uri.username or uri.password
+                   or uri.port not in (None, 443) or uri.query or uri.fragment or uri.path not in ('', '/'))
+    except (ValueError, TypeError, AttributeError):
+        invalid = True
+    if invalid:
+        raise TransportError('Enter an HTTPS server address without a path or credentials')
+    if not re.fullmatch(r'[a-zA-Z0-9.-]+', uri.hostname) or '.' not in uri.hostname:
+        raise TransportError('Enter the HTTPS domain assigned by ngrok')
+    try:
+        ipaddress.ip_address(uri.hostname)
+    except ValueError:
+        pass
+    else:
+        raise TransportError('Enter the domain assigned by ngrok, not an IP address')
+    return f'https://{uri.hostname.lower()}'
 
 
 def validate_tailscale_ip(value):

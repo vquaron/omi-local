@@ -9980,4 +9980,74 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get localMacServers => 'Shranjeni strežniki';
+
+  @override
+  String get liveTranslation => 'Prevajanje v živo';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Prevedi v';
+
+  @override
+  String get liveTranslationHelp =>
+      'Povezani strežnik prikaže prevod pod izvirnikom. Samodejno se uporabi model za povzemanje, razen če v knjižnici strežnika izberete drugega: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Na povezanem strežniku ni nastavljen prevajalski model. Odprite njegovo knjižnico: Settings → Summarization ali Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Prevajanje na povezanem strežniku ni na voljo. Preverite njegovo knjižnico: Settings → Translation.';
+
+  @override
+  String get diarization => 'Diarizacija';
+
+  @override
+  String get providerUnavailable => 'Strežnik ni na voljo';
+
+  @override
+  String get providerMisconfigured => 'Preverite nastavitve ponudnika';
+
+  @override
+  String speakersCount(int count) {
+    return '$count govorcev';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Diarizacija ni bila izvedena';
+
+  @override
+  String get diarizationFailed => 'Diarizacija ni uspela';
+
+  @override
+  String get localProcessingHelp =>
+      'Oznake govorcev v živo prihajajo od ponudnika Live. Diarizacija spodaj obdeluje končane posnetke.';
+
+  @override
+  String get localProcessingApplyHelp => 'Pred preklopom ustavite snemanje. Izbrani strežniki prejmejo vaš zvok.';
+
+  @override
+  String get localProcessingKeyHelp => 'Prazno polje ohrani shranjeni ključ. Drug strežnik potrebuje svoj ključ.';
+
+  @override
+  String get localProcessingUnsupported => 'Za urejanje teh nastavitev posodobite seznanjeni strežnik.';
+
+  @override
+  String get localProcessingFinished => 'Končani posnetki';
+
+  @override
+  String get localProcessingProbe => 'Preizkusi povezavo';
+
+  @override
+  String get localProcessingPending => 'Shranjene spremembe še niso aktivne. Tapnite Potrdi, da jih uveljavite.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Posodobite strežnik za sinhronizacijo zvoka. Zvok, shranjen v telefonu, se ohrani.';
+
+  @override
+  String get liveTranslationBidirectional => 'Dvosmerno prevajanje';
+
+  @override
+  String get liveTranslationPairHelp => 'Prepoznaj jezik vsake fraze in jo prevedi v drugi izbrani jezik.';
 }

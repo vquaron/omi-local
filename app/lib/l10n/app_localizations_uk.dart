@@ -9976,4 +9976,74 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get localMacServers => 'Збережені сервери';
+
+  @override
+  String get liveTranslation => 'Переклад наживо';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Перекладати на';
+
+  @override
+  String get liveTranslationHelp =>
+      'Підключений сервер показує переклад під оригіналом. Автоматично використовується модель підсумовування, якщо іншу не вибрано в бібліотеці сервера: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'На підключеному сервері не налаштовано модель перекладу. Відкрийте його бібліотеку: Settings → Summarization або Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Переклад недоступний на підключеному сервері. Перевірте його бібліотеку: Settings → Translation.';
+
+  @override
+  String get diarization => 'Діаризація';
+
+  @override
+  String get providerUnavailable => 'Сервер недоступний';
+
+  @override
+  String get providerMisconfigured => 'Перевірте налаштування провайдера';
+
+  @override
+  String speakersCount(int count) {
+    return 'Мовців: $count';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Діаризацію не виконано';
+
+  @override
+  String get diarizationFailed => 'Помилка діаризації';
+
+  @override
+  String get localProcessingHelp =>
+      'Мітки мовців у реальному часі надходять від Live-провайдера. Діаризація нижче обробляє завершені записи.';
+
+  @override
+  String get localProcessingApplyHelp => 'Перед перемиканням зупиніть запис. Вибрані сервери отримують ваше аудіо.';
+
+  @override
+  String get localProcessingKeyHelp => 'Порожнє поле зберігає ключ. Іншому серверу потрібен власний ключ.';
+
+  @override
+  String get localProcessingUnsupported => 'Оновіть підключений сервер, щоб змінювати ці налаштування.';
+
+  @override
+  String get localProcessingFinished => 'Завершені записи';
+
+  @override
+  String get localProcessingProbe => 'Перевірити з’єднання';
+
+  @override
+  String get localProcessingPending => 'Збережені зміни ще не діють. Натисніть «Підтвердити», щоб застосувати.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Оновіть сервер для передавання аудіо. Збережене на телефоні аудіо залишиться.';
+
+  @override
+  String get liveTranslationBidirectional => 'Двосторонній переклад';
+
+  @override
+  String get liveTranslationPairHelp => 'Визначати мову кожної фрази й перекладати іншою вибраною мовою.';
 }

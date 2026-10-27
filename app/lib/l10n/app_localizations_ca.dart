@@ -10006,4 +10006,77 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get localMacServers => 'Servidors desats';
+
+  @override
+  String get liveTranslation => 'Traducció en directe';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Tradueix a';
+
+  @override
+  String get liveTranslationHelp =>
+      'El servidor connectat mostra la traducció sota l\'original. S\'utilitza automàticament el model de resum, tret que en triïs un altre a la biblioteca del servidor: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'No hi ha cap model de traducció configurat al servidor connectat. Obre\'n la biblioteca: Settings → Summarization o Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'La traducció no està disponible al servidor connectat. Comprova\'n la biblioteca: Settings → Translation.';
+
+  @override
+  String get diarization => 'Diarització';
+
+  @override
+  String get providerUnavailable => 'Servidor no disponible';
+
+  @override
+  String get providerMisconfigured => 'Revisa la configuració del proveïdor';
+
+  @override
+  String speakersCount(int count) {
+    return '$count parlants';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Diarització no realitzada';
+
+  @override
+  String get diarizationFailed => 'Error de diarització';
+
+  @override
+  String get localProcessingHelp =>
+      'Les etiquetes de parlants en directe provenen del proveïdor Live. La diarització següent processa gravacions acabades.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'Atura la gravació abans de canviar. Els servidors seleccionats reben el teu àudio.';
+
+  @override
+  String get localProcessingKeyHelp =>
+      'Deixa-ho en blanc per conservar la clau desada. Un altre servidor necessita la seva pròpia clau.';
+
+  @override
+  String get localProcessingUnsupported => 'Actualitza el servidor vinculat per editar aquests ajustos.';
+
+  @override
+  String get localProcessingFinished => 'Gravacions acabades';
+
+  @override
+  String get localProcessingProbe => 'Prova la connexió';
+
+  @override
+  String get localProcessingPending => 'Els canvis desats no estan actius. Toca Confirma per aplicar-los.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Actualitzeu el servidor per sincronitzar l’àudio. Es conserva l’àudio desat al telèfon.';
+
+  @override
+  String get liveTranslationBidirectional => 'Traducció bidireccional';
+
+  @override
+  String get liveTranslationPairHelp =>
+      'Detecta la llengua de cada frase i tradueix-la a l’altra llengua seleccionada.';
 }

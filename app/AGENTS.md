@@ -7,7 +7,11 @@ initialization. Bare Tailscale IPv4 defaults to HTTP port 20000; Docker pairing 
 the explicit published port (21000 by default). A full HTTP URL without a port
 uses standard port 80. HTTP/WS is allowed only for
 100.64.0.0/10; HTTPS/WSS remains on port 443. Keep credentials confined to the paired origin and block
-redirects. Local sessions do not require Firebase Auth. `make test-transport-app`
+redirects. Local sessions do not require Firebase Auth. Offline startup skips cloud onboarding
+and opens Local Mac pairing directly; a physical iPhone must not offer sign-in
+through the Mac loopback Auth emulator. Detect the simulator through the native
+environment channel. Restore offline onboarding defaults after Settings clears
+preferences on sign-out; re-entry must still request runtime permissions. `make test-transport-app`
 at the repo root covers pairing, network policy, legacy auth, and the analyzer.
 After deletion from the local web library, pull down the Conversations list to
 refresh. A successful empty server page must clear the cache; cached rows may
@@ -18,10 +22,38 @@ finishes the phone session. Home entry/BLE reconnect must not take over phone au
 Local Omi starts automatically on device connection unless explicitly stopped or
 muted; transient BLE loss must invalidate the old subscription/state without
 changing that intent. A selected phone mic keeps ownership across BLE reconnect.
+Adapter-off/reset events invalidate the transport even without a peripheral
+disconnect callback; queued device-ready cannot restore it while the radio is off.
+On iOS radio-on, retry known peripherals through the existing native reconnect
+policy; preserve manual disconnect and rebuild notification subscriptions.
+Device setup must recheck the owning connection after battery/listener awaits
+before starting capture; a raw disconnect invalidates it before the UI debounce.
 Stop fences pending phone startup and reconnect; native Start waits for native Stop.
 Phone actions and failure feedback must follow the selected input and capture state.
 Phone-microphone PCM16 must include `source=phone` on the initial listen socket
 as well as reconnects; the local capture sink uses that source to select WAV capture.
+Paired audio is journaled before live send and retained until an exact durable
+part receipt. Socket send is not proof of server storage. Saved pairings may start
+phone journaling offline; capability and socket requests must not delay capture.
+Verify server delivery capability before upload or the preview-only protocol.
+Network loss must not interrupt or restart the input. Reachability recovery,
+successful route changes and foreground return checkpoint active parts for delivery;
+ordinary health polls do not rotate parts. Keep previous live-draft words within
+the same recording across sockets, with recording-relative timestamps and
+draft-scoped corrections; clear them when starting a new recording.
+Contain the Future returned by preview send; an async socket-write error retires
+only that socket and schedules recovery, never a storage error or input restart.
+Translation control sends share that protection; resend the saved language pair
+when a replacement preview connects without restarting its recording journal.
+Local live screens always expose Stop, including before text and during input
+interruption. Route it through stopLocalCapture so the owning journal is sealed.
+Show elapsed time from flushed journal samples, independent of Conversation/ASR.
+Paired Process Now checkpoints parts; never clear its active draft or invoke the
+cloud in-progress Conversation API. Native running may follow the start reply;
+start preview on that callback too, without reopening an already connected socket.
+Keep pending parts bound to the original authenticated pairing, including key
+identity. Connection and storage failures must remain visible without deleting
+unacknowledged audio. See `../docs/RECORDING_DURABILITY.md`.
 Local Mac saves named servers in Keychain and keeps form edits in a separate draft.
 Migrate the legacy pairing/draft once without authenticating; an empty saved list
 must not restore deleted entries. Selecting, editing or deleting a saved server
@@ -33,14 +65,27 @@ keeps the form open with its values and an inline result, then refreshes runtime
 status even for unchanged credentials. Edits clear previous form results.
 Personal Team ATS permits HTTP only for the Tailscale CIDR in addition to existing
 local networking; never add a global arbitrary-load exception. IP/CIDR ATS exceptions
-require iOS 17 or newer. The optional iOS launch handoff passes only the local URL/app key through the existing
-environment channel into Keychain. Never embed `.env` or the ngrok authtoken in the app.
+require iOS 17 or newer. Optional private `.env.servers` presets pass a validated, one-shot catalog through the
+existing environment channel into Keychain only at final launch, after artifact verification. Build tools must
+receive no preset payload. Imports preserve manual edits/deletions and never connect automatically.
+Never embed env files, app keys or the ngrok authtoken in the app. Verify a new server before stopping capture;
+switch conversation cache namespaces by authenticated origin/key while preserving older caches.
+Processing settings in Local Mac use authenticated `/v1/local/processing` on the paired
+origin. Saved provider drafts are separate from activation; Live, finished STT and finished
+diarization select independently. Live speaker labels belong to the selected Live provider.
+The phone may edit only profiles marked `can_edit`; prepared native paths stay on the server.
+Blank API-key edits preserve the saved key; changed server identity requires a new key.
+Never retry a settings write automatically. After an uncertain result, refresh before another
+write; discard pending responses and close the editor when the authenticated pairing changes.
 Local runtime status uses authenticated `/v1/local/status`, not the public health probe.
 Keep Mac reachability, received-audio counters and live-ASR readiness distinct; errors
 must clear stale successful status. Poll only on the visible foreground screen.
 The status card starts collapsed; keep confirmed values during an in-flight poll,
 but clear them on failure or an authenticated pairing change. Draft notifications
-must not restart polling. Errors replace the collapsed summary; the full text is
+must not restart polling. Label the authenticated server by matching saved origin
+and key; an edited draft cannot rename the active target. Retained phone audio
+during an outage shows recording/pending/offline, not a failed-capture alert.
+Keep authentication/storage errors explicit and the summary unchanged on expansion. The full text is
 available in its tooltip and expanded details.
 Saved server audio uses `external_data.local_recording` processing cards until
 transcript import succeeds. Show every pending card with date, source, duration
@@ -188,6 +233,7 @@ PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
+- Connectivity provider tests use the declared `connectivity_plus_platform_interface` dev dependency; keep it direct when importing its test seam.
 - Test state machine logic via minimal abstractions mirroring production flow
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: a test that only pumps `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs. Chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes). That file is the Mobile App Checks contract for this class.

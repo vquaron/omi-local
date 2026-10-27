@@ -848,6 +848,9 @@ class ListenReceiver:
             self._enqueue_stt_segments(segments, provider=provider or 'custom')
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
+        elif kind == 'translation':
+            # Relay-side live translation target; validated by the session host.
+            self.host.set_live_translation(payload.get('language'), payload.get('other_language'))
         elif kind == 'finalization_reason':
             reason = payload.get('reason')
             if reason in {

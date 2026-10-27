@@ -428,6 +428,7 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         from . import local_live
 
         extra["OMI_LOCAL_PAIRING_FILE"] = str(cfg.layout.state_root / "pairing.json")
+        extra["OMI_LOCAL_PROCESSING_URL"] = f"http://127.0.0.1:{cfg.backend_port + 1}"
         extra["ADMIN_KEY_AUTH_ENABLED"] = "false"
         # Preserve explicit provider choices, including disabled live STT.
         extra["OMI_LOCAL_LIVE_PREVIEW_URL"] = local_live.selected_endpoint(cfg)

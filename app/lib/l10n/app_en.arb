@@ -11757,5 +11757,35 @@
     "localMacKeyRejected": "The access key was rejected. Check the key on your Mac.",
     "localMacConnectionFailed": "Could not connect. Check the address and that your Mac and tunnel are running.",
     "localMacHelp": "Enter your Tailscale IP (or IP:port), or ngrok HTTPS address, and app key. Connecting stops recording. Audio stays on your server.",
-    "localMacServers": "Saved servers"
+    "localMacServers": "Saved servers",
+    "liveTranslation": "Live translation",
+    "liveTranslationTargetLanguage": "Translate to",
+    "liveTranslationHelp": "Translate on the connected server. The original stays; translation appears under each line. The active Summarization model is used automatically unless you select a Translation model in the server library: Settings → Translation.",
+    "liveTranslationUnconfigured": "No translation model is configured on the connected server. Open its web library → Settings → Summarization or Translation → Save → Use.",
+    "liveTranslationFailed": "Translation is unavailable on the connected server. Check its web library → Settings → Translation.",
+    "diarization": "Diarization",
+    "providerUnavailable": "Server unavailable",
+    "providerMisconfigured": "Check provider settings",
+    "speakersCount": "{count} speakers",
+    "@speakersCount": {
+        "description": "Number of distinct speakers found by diarization",
+        "placeholders": {
+            "count": {
+                "type": "int",
+                "example": "2"
+            }
+        }
+    },
+    "diarizationNotPerformed": "Diarization not performed",
+    "diarizationFailed": "Diarization failed",
+    "localProcessingHelp": "Live speaker labels come from the Live provider. Diarization below processes finished recordings.",
+    "localProcessingApplyHelp": "Stop recording before switching. Selected servers receive your audio.",
+    "localProcessingKeyHelp": "Blank keeps the saved key. A different server requires its own key.",
+    "localProcessingUnsupported": "Update the paired server to edit these settings.",
+    "localProcessingFinished": "Finished recordings",
+    "localProcessingProbe": "Test connection",
+    "localProcessingPending": "Saved changes are not active. Tap Confirm to apply.",
+    "localAudioServerUpdateRequired": "Update the server to sync audio. Audio saved on the phone is kept.",
+    "liveTranslationBidirectional": "Two-way translation",
+    "liveTranslationPairHelp": "Detect the language of each phrase and translate into the other selected language."
 }

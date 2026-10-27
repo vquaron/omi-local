@@ -253,8 +253,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         widget.leadingItems.length != oldWidget.leadingItems.length ||
         widget.layoutIdentity != oldWidget.layoutIdentity;
     final shouldFollow = !_userHasScrolled;
+    // A live snapshot arriving under an active drag or fling must not jump the
+    // list: jumpTo/animateTo cancel the gesture and the finger goes dead. The
+    // reader's position is captured again when the gesture settles.
+    final gestureOwnsList = _isUserScrolling;
 
-    if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
+    if (contentChanged && !shouldFollow && !gestureOwnsList) _pendingAnchorRestore = true;
     _syncSegmentKeys();
 
     if (widget.searchQuery != oldWidget.searchQuery) {
@@ -268,9 +272,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       }
     }
 
-    if (contentChanged) {
+    if (contentChanged && !gestureOwnsList) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+        if (!mounted || _isUserScrolling) return;
         if (shouldFollow) {
           _scrollToBottomGently();
         } else {
@@ -306,9 +310,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (!_isAutoScrolling && !_isRestoringAnchor && !_pendingAnchorRestore) {
       // Record the reader's intent on the first pixel of a drag. A live update
       // can arrive before Flutter emits the corresponding idle notification.
+      // While the gesture is still active only raise the intent: the bottom
+      // tolerance applies once the reader lets go, otherwise the first pixels
+      // of a drag away from the live edge would be followed straight back.
       final wasUserHasScrolled = _userHasScrolled;
-      _userHasScrolled = !isAtBottom;
-      if (isAtBottom && wasUserHasScrolled) {
+      _userHasScrolled = _isUserScrolling ? (_userHasScrolled || distanceFromBottom > 0.5) : !isAtBottom;
+      if (isAtBottom && wasUserHasScrolled && !_userHasScrolled) {
         widget.scrollState?.update(offset: currentScroll, isAtBottom: true, layoutIdentity: widget.layoutIdentity);
       }
     }
@@ -319,8 +326,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (!_scrollController.hasClients) return;
 
     final currentScroll = _scrollController.offset;
-    final isAtBottom = _scrollController.position.maxScrollExtent - currentScroll <= 24;
-    _userHasScrolled = !isAtBottom;
+    final distanceFromBottom = _scrollController.position.maxScrollExtent - currentScroll;
+    final isAtBottom = distanceFromBottom <= 24;
+    // Mid-gesture the intent can only be raised; the tolerance applies on settle.
+    _userHasScrolled = _isUserScrolling ? (_userHasScrolled || distanceFromBottom > 0.5) : !isAtBottom;
     final scrollState = widget.scrollState;
     if (scrollState != null) {
       String? anchorId;
@@ -374,7 +383,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _isRestoringAnchor = true;
     try {
       for (var attempt = 0; attempt < 20; attempt++) {
-        if (!mounted || !_scrollController.hasClients) return;
+        if (!mounted || !_scrollController.hasClients || _isUserScrolling) return;
         final anchorContext = _segmentKeys[anchorId]?.currentContext;
         final anchor = anchorContext?.findRenderObject();
         if (anchor is RenderBox) {
@@ -403,7 +412,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       _isAutoScrolling = false;
     }
 
-    if (!mounted || !_scrollController.hasClients) return;
+    if (!mounted || !_scrollController.hasClients || _isUserScrolling) return;
     _userHasScrolled = true;
     scrollState.update(
       offset: _scrollController.offset,
@@ -470,7 +479,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Future<void> _scrollToBottomGently({bool animated = true, bool force = false}) {
     if (!_scrollController.hasClients) return Future.value();
-    if (!force && widget.followLatest && _userHasScrolled) return Future.value();
+    if (!force && (_isUserScrolling || (widget.followLatest && _userHasScrolled))) return Future.value();
     _followAgain = true;
     final activeFollow = _activeFollow;
     if (activeFollow != null) return activeFollow;
@@ -484,8 +493,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   bool _onUserScroll(UserScrollNotification notification) {
-    if (_isRestoringAnchor || _pendingAnchorRestore) return false;
     if (notification.direction != ScrollDirection.idle) {
+      if (_isRestoringAnchor || _pendingAnchorRestore) return false;
       _isUserScrolling = true;
       if (_isAutoScrolling) {
         _userInterruptedAutoScroll = true;
@@ -494,17 +503,20 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       }
       _captureCurrentPosition();
     } else if (_isUserScrolling) {
-      _captureCurrentPosition();
+      // The gesture (drag or fling) settled: this is where the bottom tolerance
+      // decides whether live following resumes.
       _isUserScrolling = false;
+      _captureCurrentPosition();
+      if (!_userHasScrolled && widget.followLatest) _scrollToBottomGently(animated: false);
     }
     return false;
   }
 
   bool _onScrollUpdate(ScrollUpdateNotification notification) {
     if (notification.depth != 0 || notification.dragDetails == null) return false;
-    if (_isRestoringAnchor || _pendingAnchorRestore) return false;
 
     _isUserScrolling = true;
+    _pendingAnchorRestore = false; // The finger owns the position now; any restore in flight aborts.
     if (_isAutoScrolling) {
       _userInterruptedAutoScroll = true;
       _followAgain = false;
@@ -521,7 +533,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   bool _onScrollMetrics(ScrollMetricsNotification notification) {
-    if (!widget.followLatest || _isAutoScrolling) return false;
+    if (!widget.followLatest || _isAutoScrolling || _isUserScrolling) return false;
     final shouldFollow = !_userHasScrolled;
     if (shouldFollow && notification.metrics.extentAfter > 0.5) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1108,16 +1120,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           },
         );
       },
-      child: const Opacity(
+      child: Opacity(
         opacity: 0.5,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle, size: 12, color: Colors.grey),
-            SizedBox(width: 4),
+            const Icon(Icons.check_circle, size: 12, color: Colors.grey),
+            const SizedBox(width: 4),
             Text(
-              'translated by omi',
-              style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+              context.l10n.translatedByOmi,
+              style: const TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
             ),
           ],
         ),

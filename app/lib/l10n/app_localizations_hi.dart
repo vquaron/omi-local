@@ -9938,4 +9938,75 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get localMacServers => 'सहेजे गए सर्वर';
+
+  @override
+  String get liveTranslation => 'लाइव अनुवाद';
+
+  @override
+  String get liveTranslationTargetLanguage => 'इस भाषा में अनुवाद करें';
+
+  @override
+  String get liveTranslationHelp =>
+      'जुड़ा हुआ सर्वर अनुवाद को मूल पाठ के नीचे दिखाता है। सारांश मॉडल अपने आप इस्तेमाल होता है, जब तक आप सर्वर की लाइब्रेरी में दूसरा मॉडल न चुनें: Settings → Translation।';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'जुड़े हुए सर्वर पर अनुवाद मॉडल सेट नहीं है। उसकी लाइब्रेरी खोलें: Settings → Summarization या Translation → Save → Use।';
+
+  @override
+  String get liveTranslationFailed =>
+      'जुड़े हुए सर्वर पर अनुवाद उपलब्ध नहीं है। उसकी लाइब्रेरी देखें: Settings → Translation।';
+
+  @override
+  String get diarization => 'वक्ता पहचान';
+
+  @override
+  String get providerUnavailable => 'सर्वर उपलब्ध नहीं';
+
+  @override
+  String get providerMisconfigured => 'प्रदाता सेटिंग जांचें';
+
+  @override
+  String speakersCount(int count) {
+    return '$count वक्ता';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'वक्ता पहचान नहीं की गई';
+
+  @override
+  String get diarizationFailed => 'वक्ता पहचान विफल';
+
+  @override
+  String get localProcessingHelp =>
+      'लाइव वक्ता लेबल Live प्रदाता से आते हैं। नीचे का वक्ता विभाजन पूरी हुई रिकॉर्डिंग को प्रोसेस करता है।';
+
+  @override
+  String get localProcessingApplyHelp => 'बदलने से पहले रिकॉर्डिंग रोकें। चुने गए सर्वर आपका ऑडियो प्राप्त करते हैं।';
+
+  @override
+  String get localProcessingKeyHelp =>
+      'खाली छोड़ने पर सहेजी गई कुंजी बनी रहती है। दूसरे सर्वर के लिए उसकी अपनी कुंजी चाहिए।';
+
+  @override
+  String get localProcessingUnsupported => 'इन सेटिंग्स को बदलने के लिए जुड़े सर्वर को अपडेट करें।';
+
+  @override
+  String get localProcessingFinished => 'पूरी हुई रिकॉर्डिंग';
+
+  @override
+  String get localProcessingProbe => 'कनेक्शन जाँचें';
+
+  @override
+  String get localProcessingPending => 'सहेजे गए बदलाव सक्रिय नहीं हैं। लागू करने के लिए पुष्टि करें पर टैप करें।';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'ऑडियो सिंक करने के लिए सर्वर अपडेट करें। फ़ोन पर सहेजा गया ऑडियो सुरक्षित रहता है।';
+
+  @override
+  String get liveTranslationBidirectional => 'दोतरफ़ा अनुवाद';
+
+  @override
+  String get liveTranslationPairHelp => 'हर वाक्य की भाषा पहचानें और दूसरी चुनी हुई भाषा में अनुवाद करें।';
 }

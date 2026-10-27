@@ -6,6 +6,7 @@ import fcntl
 import json
 import os
 import stat
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -83,6 +84,52 @@ def final_status():
         return _status('unavailable', 'missing_configuration')
     except (ValueError, OSError):
         return _status('unavailable', 'invalid_configuration')
+
+
+STAGE_STATUSES = {'ready', 'unavailable', 'misconfigured', 'disabled'}
+STAGE_NAMES = ('live', 'stt', 'diarization', 'summary')
+STALE_AFTER_SECONDS = 180
+
+
+def _read_private_json(path, limit=65536):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, 'rb') as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            return None
+        raw = stream.read(limit + 1)
+    if len(raw) > limit:
+        return None
+    return json.loads(raw)
+
+
+def provider_stages(*, now=None):
+    """Harness-written readiness of the selected providers; fixed fields only."""
+    root_value = os.environ.get('OMI_HARNESS_STATE_ROOT')
+    if not root_value:
+        return None
+    try:
+        report = _read_private_json(Path(root_value) / 'provider-health.json')
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+    if not isinstance(report, dict) or report.get('version') != 1 or not isinstance(report.get('stages'), dict):
+        return None
+    checked_at = report.get('checked_at')
+    if type(checked_at) is not int or checked_at < 0:
+        return None
+    current = time.time() if now is None else now
+    result = {'checked_at': checked_at, 'stale': current - checked_at > STALE_AFTER_SECONDS}
+    for stage in STAGE_NAMES:
+        entry = report['stages'].get(stage)
+        if not isinstance(entry, dict):
+            continue
+        status = entry.get('status')
+        row = {'status': status if status in STAGE_STATUSES else 'unknown'}
+        for field in ('kind', 'name'):
+            value = entry.get(field)
+            if isinstance(value, str) and value.strip() and value.isprintable():
+                row[field] = value[:100]
+        result[stage] = row
+    return result
 
 
 def local_transcription_status():

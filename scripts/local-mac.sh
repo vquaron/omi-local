@@ -17,6 +17,10 @@ if [ ! -x "$PYTHON" ]; then
   exit 1
 fi
 export PYTHONPATH="$PWD/scripts/dev-harness"
+if [ "${1:-}" = providers ]; then
+  shift
+  exec "$PYTHON" -m dev_harness.local_provider_cli "$@"
+fi
 if [ "${1:-}" = launcher ]; then
   shift
   exec "$PYTHON" -m dev_harness.local_launcher "$@"

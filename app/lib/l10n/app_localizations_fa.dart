@@ -9944,4 +9944,75 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get localMacServers => 'سرورهای ذخیره‌شده';
+
+  @override
+  String get liveTranslation => 'ترجمهٔ زنده';
+
+  @override
+  String get liveTranslationTargetLanguage => 'ترجمه به';
+
+  @override
+  String get liveTranslationHelp =>
+      'سرور متصل ترجمه را زیر متن اصلی نشان می‌دهد. مدل خلاصه‌سازی خودکار استفاده می‌شود، مگر اینکه در کتابخانهٔ سرور مدل دیگری انتخاب کنید: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'مدل ترجمه‌ای روی سرور متصل تنظیم نشده است. کتابخانهٔ آن را باز کنید: Settings → Summarization یا Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'ترجمه روی سرور متصل در دسترس نیست. کتابخانهٔ آن را بررسی کنید: Settings → Translation.';
+
+  @override
+  String get diarization => 'تفکیک گوینده';
+
+  @override
+  String get providerUnavailable => 'سرور در دسترس نیست';
+
+  @override
+  String get providerMisconfigured => 'تنظیمات ارائه‌دهنده را بررسی کنید';
+
+  @override
+  String speakersCount(int count) {
+    return '$count گوینده';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'تفکیک گوینده انجام نشد';
+
+  @override
+  String get diarizationFailed => 'تفکیک گوینده ناموفق بود';
+
+  @override
+  String get localProcessingHelp =>
+      'برچسب‌های زندهٔ گویندگان از ارائه‌دهندهٔ Live می‌آیند. تفکیک گویندگان در زیر، ضبط‌های تمام‌شده را پردازش می‌کند.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'پیش از تغییر، ضبط را متوقف کنید. سرورهای انتخاب‌شده صدای شما را دریافت می‌کنند.';
+
+  @override
+  String get localProcessingKeyHelp => 'خالی گذاشتن، کلید ذخیره‌شده را حفظ می‌کند. سرور دیگر به کلید خودش نیاز دارد.';
+
+  @override
+  String get localProcessingUnsupported => 'برای ویرایش این تنظیمات، سرور جفت‌شده را به‌روزرسانی کنید.';
+
+  @override
+  String get localProcessingFinished => 'ضبط‌های تمام‌شده';
+
+  @override
+  String get localProcessingProbe => 'آزمایش اتصال';
+
+  @override
+  String get localProcessingPending => 'تغییرات ذخیره‌شده فعال نیستند. برای اعمال، روی تأیید بزنید.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'برای همگام‌سازی صدا، سرور را به‌روزرسانی کنید. صدای ذخیره‌شده در تلفن حفظ می‌شود.';
+
+  @override
+  String get liveTranslationBidirectional => 'ترجمهٔ دوطرفه';
+
+  @override
+  String get liveTranslationPairHelp => 'زبان هر عبارت را تشخیص دهید و آن را به زبان انتخابی دیگر ترجمه کنید.';
 }

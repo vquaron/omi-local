@@ -9947,4 +9947,74 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get localMacServers => 'Uložené servery';
+
+  @override
+  String get liveTranslation => 'Živý preklad';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Preložiť do';
+
+  @override
+  String get liveTranslationHelp =>
+      'Pripojený server zobrazuje preklad pod originálom. Automaticky sa používa model na zhrnutie, ak v knižnici servera nevyberiete iný: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Na pripojenom serveri nie je nastavený model na preklad. Otvorte jeho knižnicu: Settings → Summarization alebo Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Preklad na pripojenom serveri nie je dostupný. Skontrolujte jeho knižnicu: Settings → Translation.';
+
+  @override
+  String get diarization => 'Diarizácia';
+
+  @override
+  String get providerUnavailable => 'Server nie je dostupný';
+
+  @override
+  String get providerMisconfigured => 'Skontrolujte nastavenia poskytovateľa';
+
+  @override
+  String speakersCount(int count) {
+    return 'Hovoriacich: $count';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Diarizácia nebola vykonaná';
+
+  @override
+  String get diarizationFailed => 'Diarizácia zlyhala';
+
+  @override
+  String get localProcessingHelp =>
+      'Živé označenia hovoriacich pochádzajú od poskytovateľa Live. Diarizácia nižšie spracúva dokončené nahrávky.';
+
+  @override
+  String get localProcessingApplyHelp => 'Pred prepnutím zastavte nahrávanie. Vybrané servery prijímajú váš zvuk.';
+
+  @override
+  String get localProcessingKeyHelp => 'Prázdne pole zachová uložený kľúč. Iný server vyžaduje vlastný kľúč.';
+
+  @override
+  String get localProcessingUnsupported => 'Ak chcete upraviť tieto nastavenia, aktualizujte spárovaný server.';
+
+  @override
+  String get localProcessingFinished => 'Dokončené nahrávky';
+
+  @override
+  String get localProcessingProbe => 'Otestovať pripojenie';
+
+  @override
+  String get localProcessingPending => 'Uložené zmeny nie sú aktívne. Klepnutím na Potvrdiť ich použijete.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Ak chcete synchronizovať zvuk, aktualizujte server. Zvuk uložený v telefóne zostane zachovaný.';
+
+  @override
+  String get liveTranslationBidirectional => 'Obojsmerný preklad';
+
+  @override
+  String get liveTranslationPairHelp => 'Rozpoznať jazyk každej frázy a preložiť ju do druhého vybraného jazyka.';
 }

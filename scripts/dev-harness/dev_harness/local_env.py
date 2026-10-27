@@ -31,8 +31,7 @@ def read_env(path):
         if value.startswith(('"', "'")) and value.endswith(value[0]):
             value = value[1:-1]
         result[name] = value
-    from .local_mac import endpoint, pairing_data
-    from .local_transport import validate_tailscale_ip
+    from .local_transport import normalize_https_url, validate_tailscale_ip
     mode = result.setdefault('OMI_LOCAL_TRANSPORT', 'ngrok')
     if mode not in {'ngrok', 'tailscale'}:
         raise LocalEnvError('OMI_LOCAL_TRANSPORT must be tailscale or ngrok')
@@ -43,13 +42,13 @@ def read_env(path):
             result['OMI_NGROK_URL'] = result.pop('NGROK_URL')
         if not all(result.get(key) for key in ('OMI_NGROK_URL', 'NGROK_AUTHTOKEN')):
             raise LocalEnvError('Local .env requires OMI_NGROK_URL and NGROK_AUTHTOKEN')
-        result['OMI_NGROK_URL'] = endpoint(result['OMI_NGROK_URL'])
+        result['OMI_NGROK_URL'] = normalize_https_url(result['OMI_NGROK_URL'])
         if not re.fullmatch(r'[A-Za-z0-9_-]{16,256}', result['NGROK_AUTHTOKEN']):
             raise LocalEnvError('Invalid NGROK_AUTHTOKEN format')
     if result.get('OMI_TAILSCALE_IP'):
         result['OMI_TAILSCALE_IP'] = validate_tailscale_ip(result['OMI_TAILSCALE_IP'])
-    if result.get('OMI_LOCAL_APP_KEY'):
-        pairing_data(result['OMI_LOCAL_APP_KEY'])
+    if result.get('OMI_LOCAL_APP_KEY') and not re.fullmatch(r'[A-Za-z0-9_-]{43}', result['OMI_LOCAL_APP_KEY']):
+        raise LocalEnvError('Invalid access key')
     return result
 
 

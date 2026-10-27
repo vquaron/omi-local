@@ -40,7 +40,7 @@ def probe(cfg, profile, *, key='', models=False):
                 return result('misconfigured', 'Окружение или кэш модели Pyannote не готовы. Загрузки не выполнялись.')
             return result('available', 'Кэш Pyannote найден. Работа модели проверяется на записи.',
                           models=[settings['speaker_model']])
-        if stage in {'stt', 'summary'}:
+        if stage in {'stt', 'summary', 'translation'}:
             base = transport.validate_url(settings.get('provider_url') or settings.get('base_url', ''))
             with transport.client(key=key, timeout=8) as client:
                 response = transport.metadata_get(client, base + '/models')

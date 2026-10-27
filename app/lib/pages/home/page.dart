@@ -396,6 +396,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         captureProvider.onAppResumed();
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
+        // The device chip can show a link native already lost while we were away.
+        unawaited(Provider.of<DeviceProvider>(context, listen: false).reconcileConnection());
       }
       // Sync Apple Reminders on foreground resume
       if (mounted && PlatformService.isApple && !Env.isOfflineRuntime) {

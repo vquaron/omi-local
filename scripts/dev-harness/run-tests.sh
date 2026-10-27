@@ -1,45 +1,43 @@
 #!/usr/bin/env bash
-# Deterministic dev-harness unit-test lane (checks-manifest: dev-harness-unit-tests).
-#
-# Prefers an interpreter that ALREADY has pytest + python-dotenv + Google ADC + PostHog (the
-# repo's backend venv (POSIX or Windows layout), then the ambient python3) so the check needs no
-# uv cache, network, or ~/.cache write — keeping `make preflight` green in restricted
-# local/agent environments. Only a truly bare environment falls back to uv,
-# and even then the cache is redirected to a writable temp dir. Real pytest
-# failures still fail the lane in every path.
+# Full standalone harness suite; no dependency installation or service startup.
+# The transport CI lane runs the same inventory through make test-library.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
+tests=()
+seen=' '
+while IFS= read -r path || [[ -n "$path" ]]; do
+  [[ -n "$path" && "$path" != \#* ]] || continue
+  [[ "$path" == scripts/dev-harness/tests/test_*.py && -f "$path" ]] || {
+    echo 'Invalid standalone test inventory; check scripts/dev-harness/standalone-tests.txt.' >&2
+    exit 1
+  }
+  [[ "$seen" != *" $path "* ]] || { echo 'Duplicate entry in standalone test inventory.' >&2; exit 1; }
+  seen+="$path "
+  tests+=("$path")
+done < scripts/dev-harness/standalone-tests.txt
+[[ ${#tests[@]} -gt 0 ]] || { echo 'Standalone test inventory is empty.' >&2; exit 1; }
+
 run_pytest() {
-  exec "$@" -m pytest scripts/dev-harness/tests -q
+  # Tests choose their provider mode explicitly; Makefile's runtime default
+  # must not change the fixtures that exercise real/offline policy boundaries.
+  exec env -u PROVIDER_MODE "$@" -m pytest -q -p no:cacheprovider "${tests[@]}"
 }
 
 for py in \
+  "${PYTHON:-}" \
   backend/.venv/bin/python \
   backend/.venv/Scripts/python.exe \
   backend/venv/bin/python \
   backend/venv/Scripts/python.exe \
   python3; do
   if [ -x "$py" ] || command -v "$py" >/dev/null 2>&1; then
-    if "$py" -c 'import pytest, dotenv, google.auth, posthog, requests' >/dev/null 2>&1; then
+    if "$py" -c 'import pytest, dotenv, httpx, yaml, numpy' >/dev/null 2>&1; then
       run_pytest "$py"
     fi
   fi
 done
 
-if command -v uv >/dev/null 2>&1; then
-  # Redirect the cache off the default ~/.cache/uv, which is not always writable
-  # in sandboxed preflight environments; a temp dir always is.
-  export UV_CACHE_DIR="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/omi-dev-harness-uv-cache}"
-  exec uv run --no-project \
-    --with 'pytest==8.4.1' \
-    --with 'python-dotenv==1.1.0' \
-    --with 'google-auth==2.32.0' \
-    --with 'posthog==3.5.2' \
-    --with 'requests~=2.33.0' \
-    python -m pytest scripts/dev-harness/tests -q
-fi
-
-echo "dev-harness tests require pytest + python-dotenv + Google ADC + PostHog via a backend venv, python3, or uv; none available" >&2
+echo 'Harness test dependencies are unavailable. Prepare the backend with ./omiloc bootstrap, then retry.' >&2
 exit 1

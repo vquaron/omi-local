@@ -10002,4 +10002,75 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get localMacServers => 'Зачувани сервери';
+
+  @override
+  String get liveTranslation => 'Превод во живо';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Преведи на';
+
+  @override
+  String get liveTranslationHelp =>
+      'Поврзаниот сервер го прикажува преводот под оригиналот. Автоматски се користи моделот за резиме, освен ако изберете друг во библиотеката на серверот: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'На поврзаниот сервер не е поставен модел за превод. Отворете ја неговата библиотека: Settings → Summarization или Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Преводот не е достапен на поврзаниот сервер. Проверете ја неговата библиотека: Settings → Translation.';
+
+  @override
+  String get diarization => 'Дијаризација';
+
+  @override
+  String get providerUnavailable => 'Серверот е недостапен';
+
+  @override
+  String get providerMisconfigured => 'Проверете ги поставките на провајдерот';
+
+  @override
+  String speakersCount(int count) {
+    return '$count говорници';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Дијаризацијата не е извршена';
+
+  @override
+  String get diarizationFailed => 'Дијаризацијата не успеа';
+
+  @override
+  String get localProcessingHelp =>
+      'Ознаките на говорниците во живо доаѓаат од Live давателот. Дијаризацијата подолу обработува завршени снимки.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'Запрете го снимањето пред префрлување. Избраните сервери го добиваат вашето аудио.';
+
+  @override
+  String get localProcessingKeyHelp => 'Празно поле го задржува зачуваниот клуч. Друг сервер бара свој клуч.';
+
+  @override
+  String get localProcessingUnsupported => 'Ажурирајте го спарениот сервер за да ги уредите овие поставки.';
+
+  @override
+  String get localProcessingFinished => 'Завршени снимки';
+
+  @override
+  String get localProcessingProbe => 'Провери врска';
+
+  @override
+  String get localProcessingPending => 'Зачуваните промени не се активни. Допрете Потврди за да ги примените.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Ажурирајте го серверот за синхронизација на аудио. Аудиото зачувано на телефонот се задржува.';
+
+  @override
+  String get liveTranslationBidirectional => 'Двонасочен превод';
+
+  @override
+  String get liveTranslationPairHelp => 'Препознај го јазикот на секоја фраза и преведи ја на другиот избран јазик.';
 }

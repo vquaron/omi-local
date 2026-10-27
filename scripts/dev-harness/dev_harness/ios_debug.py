@@ -15,6 +15,7 @@ import tempfile
 
 from .launch_iphone import select_iphone
 from .local_env import LocalEnvError
+from .server_presets import clean_environment, launch_environment
 
 DEFINES = (
     '--dart-define=OMI_APP_PROFILE=local_dev', '--dart-define=OMI_RUNTIME_MODE=offline',
@@ -48,11 +49,7 @@ def tool_environment(root):
     env['GEM_PATH'] = os.pathsep.join(dict.fromkeys(gem_paths))
     env.update(OMI_RUNTIME_MODE='offline', OMI_APP_PROFILE='local_dev')
     # Each app owns its pairing in Keychain. Do not inherit a provisioning handoff.
-    for name in ('NGROK_AUTHTOKEN', 'OMI_LOCAL_APP_KEY', 'OMI_LOCAL_MAC_KEY', 'OMI_LOCAL_MAC_URL',
-                 'DEVICECTL_CHILD_NGROK_AUTHTOKEN', 'DEVICECTL_CHILD_OMI_LOCAL_MAC_KEY',
-                 'DEVICECTL_CHILD_OMI_LOCAL_MAC_URL'):
-        env.pop(name, None)
-    return env
+    return clean_environment(env)
 
 
 def prepare(root):
@@ -204,6 +201,7 @@ def session(root, *, check=False, build_only=False):
         return
     if not build_only and not sys.stdin.isatty():
         raise LocalEnvError('Open dev-iphone.command in Terminal for hot reload, or use --build-only')
+    launch_env, launch_hidden = (env, []) if build_only else launch_environment(root, environ=env)
     configure_debug_identity(root, bundle)
     artifact = root / 'app/build/ios/Debug-dev-iphoneos/Runner.app'
     record = root / '.local/ios-debug.json'
@@ -235,7 +233,7 @@ def session(root, *, check=False, build_only=False):
         json.dump(data, stream)
     if not build_only:
         print('Flutter controls: r = hot reload, R = hot restart, q = quit. Keep this terminal open.', flush=True)
-        run_flutter(flutter_command(artifact, device), root, env, hidden)
+        run_flutter(flutter_command(artifact, device), root, launch_env, hidden + launch_hidden)
 
 
 def main():

@@ -11,6 +11,7 @@ from utils.env_loader import is_offline_runtime
 
 _ALLOWED_HTTP = frozenset(
     {
+        ("POST", "/v1/local/audio/parts"),
         ("GET", "/openapi.json"),
         ("GET", "/v1/account/cutover/control"),
         ("GET", "/v1/action-items"),
@@ -19,6 +20,11 @@ _ALLOWED_HTTP = frozenset(
         ("GET", "/v1/health"),
         ("GET", "/v1/local/status"),
         ("GET", "/v1/local/preview"),
+        ("GET", "/v1/local/processing"),
+        ("POST", "/v1/local/processing/save"),
+        ("POST", "/v1/local/processing/probe"),
+        ("POST", "/v1/local/processing/models"),
+        ("POST", "/v1/local/processing/activate"),
         ("HEAD", "/v1/health"),
         ("GET", "/v1/users/available-languages"),
         ("GET", "/v1/users/daily-summaries"),
@@ -39,6 +45,11 @@ _ALLOWED_WEBSOCKETS = frozenset({"/v4/listen"})
 
 
 def is_offline_http_route_allowed(method: str, path: str) -> bool:
+    if method.upper() == 'DELETE' and (
+        path == '/v1/local/processing/profiles/{profile_id}'
+        or re.fullmatch(r'/v1/local/processing/profiles/[A-Za-z0-9_-]{1,64}', path)
+    ):
+        return True
     if method.upper() == 'GET' and (
         path == '/v1/conversations/{conversation_id}'
         or re.fullmatch(r'/v1/conversations/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', path)

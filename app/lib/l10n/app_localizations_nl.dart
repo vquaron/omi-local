@@ -9981,4 +9981,77 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get localMacServers => 'Opgeslagen servers';
+
+  @override
+  String get liveTranslation => 'Livevertaling';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Vertalen naar';
+
+  @override
+  String get liveTranslationHelp =>
+      'De verbonden server toont de vertaling onder het origineel. Het samenvattingsmodel wordt automatisch gebruikt, tenzij je een ander model kiest in de serverbibliotheek: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Er is geen vertaalmodel ingesteld op de verbonden server. Open de bibliotheek: Settings → Summarization of Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Vertalen is niet beschikbaar op de verbonden server. Controleer de bibliotheek: Settings → Translation.';
+
+  @override
+  String get diarization => 'Sprekerherkenning';
+
+  @override
+  String get providerUnavailable => 'Server niet bereikbaar';
+
+  @override
+  String get providerMisconfigured => 'Controleer providerinstellingen';
+
+  @override
+  String speakersCount(int count) {
+    return '$count sprekers';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Sprekerherkenning niet uitgevoerd';
+
+  @override
+  String get diarizationFailed => 'Sprekerherkenning mislukt';
+
+  @override
+  String get localProcessingHelp =>
+      'Live-sprekerlabels komen van de Live-provider. De diarizatie hieronder verwerkt voltooide opnamen.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'Stop de opname voordat je wisselt. De geselecteerde servers ontvangen je audio.';
+
+  @override
+  String get localProcessingKeyHelp =>
+      'Laat leeg om de opgeslagen sleutel te behouden. Een andere server heeft een eigen sleutel nodig.';
+
+  @override
+  String get localProcessingUnsupported => 'Werk de gekoppelde server bij om deze instellingen te wijzigen.';
+
+  @override
+  String get localProcessingFinished => 'Voltooide opnamen';
+
+  @override
+  String get localProcessingProbe => 'Verbinding testen';
+
+  @override
+  String get localProcessingPending =>
+      'Opgeslagen wijzigingen zijn nog niet actief. Tik op Bevestigen om ze toe te passen.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Werk de server bij om audio te synchroniseren. Audio die op de telefoon is opgeslagen blijft bewaard.';
+
+  @override
+  String get liveTranslationBidirectional => 'Vertaling in beide richtingen';
+
+  @override
+  String get liveTranslationPairHelp => 'Herken de taal van elke zin en vertaal naar de andere geselecteerde taal.';
 }

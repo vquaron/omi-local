@@ -9771,4 +9771,71 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get localMacServers => '保存済みサーバー';
+
+  @override
+  String get liveTranslation => 'リアルタイム翻訳';
+
+  @override
+  String get liveTranslationTargetLanguage => '翻訳先';
+
+  @override
+  String get liveTranslationHelp =>
+      '接続中のサーバーで翻訳し、原文の下に表示します。サーバーのライブラリの Settings → Translation で別のモデルを選ばない限り、要約モデルが自動的に使われます。';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      '接続中のサーバーに翻訳モデルが設定されていません。ライブラリの Settings → Summarization または Translation → Save → Use から設定してください。';
+
+  @override
+  String get liveTranslationFailed => '接続中のサーバーで翻訳を利用できません。ライブラリの Settings → Translation を確認してください。';
+
+  @override
+  String get diarization => '話者分離';
+
+  @override
+  String get providerUnavailable => 'サーバーに接続できません';
+
+  @override
+  String get providerMisconfigured => 'プロバイダー設定を確認してください';
+
+  @override
+  String speakersCount(int count) {
+    return '話者 $count 人';
+  }
+
+  @override
+  String get diarizationNotPerformed => '話者分離は実行されていません';
+
+  @override
+  String get diarizationFailed => '話者分離に失敗しました';
+
+  @override
+  String get localProcessingHelp => 'リアルタイムの話者ラベルはLiveプロバイダーから取得します。下の話者分離は完了した録音を処理します。';
+
+  @override
+  String get localProcessingApplyHelp => '切り替える前に録音を停止してください。選択したサーバーに音声が送信されます。';
+
+  @override
+  String get localProcessingKeyHelp => '空欄にすると保存済みのキーを保持します。別のサーバーには専用のキーが必要です。';
+
+  @override
+  String get localProcessingUnsupported => 'これらの設定を編集するには、ペアリング済みサーバーを更新してください。';
+
+  @override
+  String get localProcessingFinished => '完了した録音';
+
+  @override
+  String get localProcessingProbe => '接続テスト';
+
+  @override
+  String get localProcessingPending => '保存した変更はまだ有効ではありません。「確認」をタップして適用してください。';
+
+  @override
+  String get localAudioServerUpdateRequired => '音声を同期するにはサーバーを更新してください。電話に保存された音声は保持されます。';
+
+  @override
+  String get liveTranslationBidirectional => '双方向翻訳';
+
+  @override
+  String get liveTranslationPairHelp => '各フレーズの言語を判別し、選択したもう一方の言語に翻訳します。';
 }

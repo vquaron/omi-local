@@ -9949,4 +9949,73 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get localMacServers => 'সংরক্ষিত সার্ভার';
+
+  @override
+  String get liveTranslation => 'সরাসরি অনুবাদ';
+
+  @override
+  String get liveTranslationTargetLanguage => 'যে ভাষায় অনুবাদ করবেন';
+
+  @override
+  String get liveTranslationHelp =>
+      'সংযুক্ত সার্ভারে অনুবাদ হয় এবং মূল লেখার নিচে দেখা যায়। সার্ভারের লাইব্রেরিতে Settings → Translation থেকে অন্য মডেল না বাছলে সারসংক্ষেপের মডেল স্বয়ংক্রিয়ভাবে ব্যবহৃত হয়।';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'সংযুক্ত সার্ভারে অনুবাদের মডেল সেট করা নেই। তার লাইব্রেরি খুলুন: Settings → Summarization অথবা Translation → Save → Use।';
+
+  @override
+  String get liveTranslationFailed =>
+      'সংযুক্ত সার্ভারে অনুবাদ পাওয়া যাচ্ছে না। তার লাইব্রেরিতে দেখুন: Settings → Translation।';
+
+  @override
+  String get diarization => 'বক্তা শনাক্তকরণ';
+
+  @override
+  String get providerUnavailable => 'সার্ভার অনুপলব্ধ';
+
+  @override
+  String get providerMisconfigured => 'প্রদানকারীর সেটিংস পরীক্ষা করুন';
+
+  @override
+  String speakersCount(int count) {
+    return '$count জন বক্তা';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'বক্তা শনাক্তকরণ করা হয়নি';
+
+  @override
+  String get diarizationFailed => 'বক্তা শনাক্তকরণ ব্যর্থ';
+
+  @override
+  String get localProcessingHelp =>
+      'লাইভ বক্তার লেবেল লাইভ প্রদানকারীর কাছ থেকে আসে। নিচের ডায়ারাইজেশন সম্পূর্ণ রেকর্ডিং প্রক্রিয়া করে।';
+
+  @override
+  String get localProcessingApplyHelp => 'পরিবর্তনের আগে রেকর্ডিং বন্ধ করুন। নির্বাচিত সার্ভারগুলি আপনার অডিও পাবে।';
+
+  @override
+  String get localProcessingKeyHelp => 'ফাঁকা রাখলে সংরক্ষিত কী থাকবে। অন্য সার্ভারের জন্য তার নিজস্ব কী প্রয়োজন।';
+
+  @override
+  String get localProcessingUnsupported => 'এই সেটিংস সম্পাদনা করতে সংযুক্ত সার্ভার আপডেট করুন।';
+
+  @override
+  String get localProcessingFinished => 'সম্পূর্ণ রেকর্ডিং';
+
+  @override
+  String get localProcessingProbe => 'সংযোগ পরীক্ষা করুন';
+
+  @override
+  String get localProcessingPending => 'সংরক্ষিত পরিবর্তনগুলি সক্রিয় নয়। প্রয়োগ করতে নিশ্চিত করুন চাপুন।';
+
+  @override
+  String get localAudioServerUpdateRequired => 'অডিও সিঙ্ক করতে সার্ভার আপডেট করুন। ফোনে সংরক্ষিত অডিও রাখা হয়।';
+
+  @override
+  String get liveTranslationBidirectional => 'দ্বিমুখী অনুবাদ';
+
+  @override
+  String get liveTranslationPairHelp => 'প্রতিটি বাক্যের ভাষা শনাক্ত করে অন্য নির্বাচিত ভাষায় অনুবাদ করুন।';
 }

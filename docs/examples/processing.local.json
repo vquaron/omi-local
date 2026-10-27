@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "local-whisperkit",
+      "name": "Local WhisperKit",
+      "stage": "stt",
+      "kind": "whisperkit",
+      "settings": {
+        "model": "openai_whisper-large-v3-v20240930_626MB",
+        "language": "ru",
+        "device": "cpuAndNeuralEngine",
+        "diarization_model": "none"
+      }
+    },
+    {
+      "id": "local-pyannote",
+      "name": "Local Pyannote",
+      "stage": "diarization",
+      "kind": "pyannote",
+      "settings": {
+        "speaker_model": "pyannote/speaker-diarization-community-1",
+        "speaker_device": "cpu",
+        "speaker_threads": 4,
+        "speaker_count": 0
+      }
+    }
+  ]
+}

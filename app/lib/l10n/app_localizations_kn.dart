@@ -9976,4 +9976,75 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get localMacServers => 'ಉಳಿಸಿದ ಸರ್ವರ್‌ಗಳು';
+
+  @override
+  String get liveTranslation => 'ನೇರ ಅನುವಾದ';
+
+  @override
+  String get liveTranslationTargetLanguage => 'ಈ ಭಾಷೆಗೆ ಅನುವಾದಿಸಿ';
+
+  @override
+  String get liveTranslationHelp =>
+      'ಸಂಪರ್ಕಿತ ಸರ್ವರ್ ಮೂಲ ಪಠ್ಯದ ಕೆಳಗೆ ಅನುವಾದವನ್ನು ತೋರಿಸುತ್ತದೆ. ಸರ್ವರ್ ಗ್ರಂಥಾಲಯದ Settings → Translation ನಲ್ಲಿ ಬೇರೆ ಮಾದರಿಯನ್ನು ಆಯ್ಕೆ ಮಾಡದಿದ್ದರೆ ಸಾರಾಂಶ ಮಾದರಿಯೇ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಬಳಕೆಯಾಗುತ್ತದೆ.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'ಸಂಪರ್ಕಿತ ಸರ್ವರ್‌ನಲ್ಲಿ ಅನುವಾದ ಮಾದರಿಯನ್ನು ಹೊಂದಿಸಿಲ್ಲ. ಅದರ ಗ್ರಂಥಾಲಯ ತೆರೆಯಿರಿ: Settings → Summarization ಅಥವಾ Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'ಸಂಪರ್ಕಿತ ಸರ್ವರ್‌ನಲ್ಲಿ ಅನುವಾದ ಲಭ್ಯವಿಲ್ಲ. ಅದರ ಗ್ರಂಥಾಲಯ ಪರಿಶೀಲಿಸಿ: Settings → Translation.';
+
+  @override
+  String get diarization => 'ಮಾತನಾಡುವವರ ಗುರುತಿಸುವಿಕೆ';
+
+  @override
+  String get providerUnavailable => 'ಸರ್ವರ್ ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get providerMisconfigured => 'ಪೂರೈಕೆದಾರರ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ';
+
+  @override
+  String speakersCount(int count) {
+    return '$count ಮಾತನಾಡುವವರು';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'ಮಾತನಾಡುವವರ ಗುರುತಿಸುವಿಕೆ ನಡೆದಿಲ್ಲ';
+
+  @override
+  String get diarizationFailed => 'ಮಾತನಾಡುವವರ ಗುರುತಿಸುವಿಕೆ ವಿಫಲವಾಗಿದೆ';
+
+  @override
+  String get localProcessingHelp =>
+      'ನೇರ ವಕ್ತೃ ಲೇಬಲ್‌ಗಳು Live ಪೂರೈಕೆದಾರರಿಂದ ಬರುತ್ತವೆ. ಕೆಳಗಿನ ವಕ್ತೃ ಪ್ರತ್ಯೇಕಿಸುವಿಕೆ ಪೂರ್ಣಗೊಂಡ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುತ್ತದೆ.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'ಬದಲಾಯಿಸುವ ಮೊದಲು ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಿ. ಆಯ್ಕೆ ಮಾಡಿದ ಸರ್ವರ್‌ಗಳು ನಿಮ್ಮ ಆಡಿಯೊ ಪಡೆಯುತ್ತವೆ.';
+
+  @override
+  String get localProcessingKeyHelp => 'ಖಾಲಿ ಬಿಟ್ಟರೆ ಉಳಿಸಿದ ಕೀ ಉಳಿಯುತ್ತದೆ. ಬೇರೆ ಸರ್ವರ್‌ಗೆ ಅದರದೇ ಕೀ ಅಗತ್ಯ.';
+
+  @override
+  String get localProcessingUnsupported => 'ಈ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಬದಲಾಯಿಸಲು ಜೋಡಿಸಿದ ಸರ್ವರ್ ನವೀಕರಿಸಿ.';
+
+  @override
+  String get localProcessingFinished => 'ಪೂರ್ಣಗೊಂಡ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು';
+
+  @override
+  String get localProcessingProbe => 'ಸಂಪರ್ಕ ಪರೀಕ್ಷಿಸಿ';
+
+  @override
+  String get localProcessingPending => 'ಉಳಿಸಿದ ಬದಲಾವಣೆಗಳು ಸಕ್ರಿಯವಾಗಿಲ್ಲ. ಅನ್ವಯಿಸಲು ದೃಢೀಕರಿಸಿ ಒತ್ತಿರಿ.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'ಆಡಿಯೊ ಸಿಂಕ್ ಮಾಡಲು ಸರ್ವರ್ ನವೀಕರಿಸಿ. ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸಿದ ಆಡಿಯೊ ಸುರಕ್ಷಿತವಾಗಿರುತ್ತದೆ.';
+
+  @override
+  String get liveTranslationBidirectional => 'ದ್ವಿಮುಖ ಅನುವಾದ';
+
+  @override
+  String get liveTranslationPairHelp => 'ಪ್ರತಿ ವಾಕ್ಯದ ಭಾಷೆಯನ್ನು ಗುರುತಿಸಿ ಮತ್ತು ಆಯ್ಕೆಮಾಡಿದ ಇನ್ನೊಂದು ಭಾಷೆಗೆ ಅನುವಾದಿಸಿ.';
 }

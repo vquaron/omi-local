@@ -9952,4 +9952,75 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get localMacServers => 'Lagrede servere';
+
+  @override
+  String get liveTranslation => 'Direkteoversettelse';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Oversett til';
+
+  @override
+  String get liveTranslationHelp =>
+      'Den tilkoblede serveren viser oversettelsen under originalen. Oppsummeringsmodellen brukes automatisk med mindre du velger en annen i serverens bibliotek: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Ingen oversettelsesmodell er konfigurert på den tilkoblede serveren. Åpne biblioteket: Settings → Summarization eller Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Oversettelse er ikke tilgjengelig på den tilkoblede serveren. Sjekk biblioteket: Settings → Translation.';
+
+  @override
+  String get diarization => 'Talerinndeling';
+
+  @override
+  String get providerUnavailable => 'Serveren er utilgjengelig';
+
+  @override
+  String get providerMisconfigured => 'Sjekk leverandørinnstillinger';
+
+  @override
+  String speakersCount(int count) {
+    return '$count talere';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Talerinndeling ikke utført';
+
+  @override
+  String get diarizationFailed => 'Talerinndeling mislyktes';
+
+  @override
+  String get localProcessingHelp =>
+      'Talermarkeringer i sanntid kommer fra Live-leverandøren. Diariseringen nedenfor behandler ferdige opptak.';
+
+  @override
+  String get localProcessingApplyHelp => 'Stopp opptaket før du bytter. De valgte serverne mottar lyden din.';
+
+  @override
+  String get localProcessingKeyHelp =>
+      'Et tomt felt beholder den lagrede nøkkelen. En annen server krever sin egen nøkkel.';
+
+  @override
+  String get localProcessingUnsupported => 'Oppdater den sammenkoblede serveren for å endre disse innstillingene.';
+
+  @override
+  String get localProcessingFinished => 'Ferdige opptak';
+
+  @override
+  String get localProcessingProbe => 'Test tilkobling';
+
+  @override
+  String get localProcessingPending => 'Lagrede endringer er ikke aktive. Trykk på Bekreft for å bruke dem.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Oppdater serveren for å synkronisere lyd. Lyd som er lagret på telefonen beholdes.';
+
+  @override
+  String get liveTranslationBidirectional => 'Toveisoversettelse';
+
+  @override
+  String get liveTranslationPairHelp => 'Gjenkjenn språket i hver setning og oversett til det andre valgte språket.';
 }

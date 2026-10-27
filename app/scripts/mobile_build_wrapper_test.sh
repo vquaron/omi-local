@@ -47,6 +47,10 @@ done
   hostname() { printf 'test-mac\n'; }
   record() { printf '%s\n' "$*" >>"$log_file"; }
   flutter() {
+    [[ -z "${DEVICECTL_CHILD_OMI_LOCAL_SERVER_PRESETS_B64:-}${OMI_LOCAL_SERVER_PRESETS_B64:-}${OMI_LOCAL_APP_KEY:-}" ]] || {
+      echo 'FAIL: provisioning credentials reached a Flutter dependency/build command' >&2
+      return 1
+    }
     if [[ "$*" == 'devices --machine' ]]; then
       printf '%s\n' "$fixture_devices_json"
     else
@@ -61,8 +65,12 @@ done
   prepare_personal_ios_build_dir() { record build-directory; }
   setup_firebase() { record firebase-config; }
   generate_ios_custom_config() { record ios-config "$@"; }
+  install_personal_profile() { record profile-install "$OMI_SELECTED_IOS_DEVICE" "$@"; }
 
   export OMI_APPLE_TEAM_ID=ABCDEFGHIJ OMI_RUNTIME_MODE=offline
+  export DEVICECTL_CHILD_OMI_LOCAL_SERVER_PRESETS_B64=synthetic-launch-payload-canary
+  export OMI_LOCAL_SERVER_PRESETS_B64=synthetic-ambient-payload-canary
+  export OMI_LOCAL_APP_KEY=synthetic-ambient-key-canary
   # A simulator must not steal the physical destination, regardless of model.
   for model in 'iPhone SE (3rd generation)' 'iPhone 13' 'iPhone 17 Pro' 'Future iPhone'; do
     fixture_devices_json=$(jq -cn --arg name "$model" '[
@@ -71,11 +79,11 @@ done
     ]')
     run_build_ios dev
   done
-  [[ "$(grep -c '^flutter run --profile --flavor dev -d TEST-PHONE ' "$log_file")" == 4 ]]
+  [[ "$(grep -c '^profile-install TEST-PHONE ' "$log_file")" == 4 ]]
   grep -F 'API_BASE_URL=http://127.0.0.1:8000/' .dev.env >/dev/null
   grep -Fx 'APP_BUNDLE_IDENTIFIER=com.omi.local.testmac' ios/Flutter/PersonalTeam.xcconfig >/dev/null
-  [[ "$(grep '^flutter run ' "$log_file" | tr ' ' '\n' | grep -c '^--dart-define=OMI_APP_PROFILE=local_dev$')" == 4 ]]
-  [[ "$(grep '^flutter run ' "$log_file" | tr ' ' '\n' | grep -c '^--dart-define=OMI_RUNTIME_MODE=offline$')" == 4 ]]
+  [[ "$(grep '^profile-install ' "$log_file" | tr ' ' '\n' | grep -c '^--dart-define=OMI_APP_PROFILE=local_dev$')" == 4 ]]
+  [[ "$(grep '^profile-install ' "$log_file" | tr ' ' '\n' | grep -c '^--dart-define=OMI_RUNTIME_MODE=offline$')" == 4 ]]
 
   expect_rejected() {
     local before
@@ -101,7 +109,7 @@ done
   expect_rejected </dev/null
   OMI_IOS_DEVICE_ID=MISSING expect_rejected
   OMI_IOS_DEVICE_ID=PHONE-B OMI_APPLE_TEAM_ID=KLMNOPQRST OMI_PERSONAL_BUNDLE_ID=com.example.omiloc run_build_ios dev
-  grep -F 'flutter run --profile --flavor dev -d PHONE-B ' "$log_file" >/dev/null
+  grep -F 'profile-install PHONE-B ' "$log_file" >/dev/null
   grep -Fx 'OMI_APPLE_TEAM_ID=KLMNOPQRST' ios/Flutter/PersonalTeam.xcconfig >/dev/null
   grep -Fx 'APP_BUNDLE_IDENTIFIER=com.example.omiloc' ios/Flutter/PersonalTeam.xcconfig >/dev/null
   # A saved, verified team is valid when the environment omits it. An explicit

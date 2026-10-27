@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
@@ -62,6 +63,9 @@ class _MobileAppState extends State<MobileApp> {
               return const OnboardingWrapper();
             },
           );
+        } else if (Env.isOfflineRuntime) {
+          // Local runtime: no product video, straight to Mac pairing.
+          return const OnboardingWrapper(forceAuthPage: true);
         } else {
           return const DeviceSelectionPage();
         }

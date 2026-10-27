@@ -10,8 +10,10 @@ After installation, connect it using [Tailscale](TAILSCALE.md) or the optional [
 
 You need an Apple Silicon Mac, Xcode, Flutter, CocoaPods, and your own Apple Account.
 There is no restriction to a particular iPhone model or M-series generation.
-The project targets iOS 15.0 or later; Xcode must support the phone's iOS version
-and run on your macOS version.
+The deployment target is iOS 15.0; this alone does not establish physical
+compatibility on every supported OS. Xcode must support the phone's iOS version
+and run on your macOS version. On iOS 17+, the local build adds the narrow
+Tailscale IP range exception required by [Apple's ATS policy](https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsallowslocalnetworking).
 
 The iOS app uses the [UIScene lifecycle](https://docs.flutter.dev/release/breaking-changes/uiscenedelegate).
 Native channels are registered when the Flutter engine is ready; scene callbacks
@@ -46,9 +48,17 @@ app again. This is an [Apple limitation](https://developer.apple.com/help/accoun
    certificate properties. The number in parentheses in its name may differ;
    [Apple explains the distinction](https://developer.apple.com/forums/thread/811970).
 4. Connect the unlocked iPhone with a USB data cable and confirm trust on the Mac.
-   In Xcode, open **Window → Devices and Simulators** and wait for the phone to
+   In Xcode 27, open **Xcode → Open Developer Tool → Device Hub**
+   ([Apple's guide](https://developer.apple.com/documentation/xcode/running-your-app-on-simulated-or-physical-devices)). In older
+   versions, use **Window → Devices and Simulators**. Wait for the phone to
    become ready. On the iPhone, enable **Settings → Privacy & Security → Developer
    Mode**, restart the phone, and confirm the setting.
+
+Keep the phone unlocked until device preparation and installation finish.
+If Device Hub remains at **Preparing for development…** or installation times
+out, reconnect the USB data cable and recheck device readiness. Retain the
+attested app; a device-connection failure alone does not require rebuilding it
+or clearing build caches.
 
 ## Installation
 
@@ -56,9 +66,11 @@ app again. This is an [Apple limitation](https://developer.apple.com/help/accoun
 From the project directory:
 
 ```bash
-cd app
-bash setup.sh ios personal
+./iphone.command profile
 ```
+
+To prefill server addresses and app keys, prepare [private presets](#prefill-saved-servers)
+before this command. Otherwise enter them under **Local Mac** after installation.
 
 The script checks Xcode and the iOS SDK, Flutter, CocoaPods, the certificate with
 its private key, and phone availability. It reuses the Team ID from an existing
@@ -82,17 +94,72 @@ app from the app switcher and reopen it from its icon, then leave it in the
 background for 30 seconds and return. Both checks should reach the main screen
 without a crash or a stuck splash screen.
 
-The phone is selected from connected devices. With multiple phones, the script
-prompts you to choose; use `OMI_IOS_DEVICE_ID` for a noninteractive selection.
+Keep one paired iPhone connected by USB for automatic installation. A wired
+iPhone takes precedence over stale Wi-Fi discovery; multiple wired phones are
+rejected. With no USB phone, exactly one paired Wi-Fi candidate is checked live.
+`OMI_IOS_DEVICE_ID` may pin the build destination; installation also verifies
+that it matches the connected phone.
 If Xcode reports that the bundle identifier is taken, set your own
-`OMI_PERSONAL_BUNDLE_ID`. Enter the domain and key in the app after installation.
+`OMI_PERSONAL_BUNDLE_ID`. Use `./omiloc pair` in your own interactive terminal,
+then enter the shown address and app key under **Local Mac** in the app.
 Do not transfer old `.local`, `.venv`, `build`, keys, or signing settings.
 
-The current build was physically verified on an iPhone 17 Pro using Xcode 27.0,
+Previous builds were physically verified on an iPhone 17 Pro using Xcode 27.0,
 Flutter 3.47.4, and CocoaPods 1.17.0. Checks covered cold launch, reopening,
 background/foreground return, CV1 start/stop and pause/resume, and final transcripts
 with live preview enabled and disabled.
+Those checks predate the current phone-outbox delivery changes. An updated,
+attested iOS build and fresh interruption tests are required for that path.
 A complete repeat installation on a clean Mac remains unverified.
+
+## Prefill saved servers
+
+On the Mac that builds and launches the iPhone app, copy the public template:
+
+```bash
+cp -n omiloc.servers.env.example .env.servers
+chmod 600 .env.servers
+```
+
+Edit `.env.servers` locally with each recording server's existing app key.
+For example, an entry named `home` uses these three literal fields:
+
+```dotenv
+OMI_SERVER_home_NAME=Home Mac
+OMI_SERVER_home_URL=100.64.0.1:20000
+OMI_SERVER_home_KEY=<existing 43-character app key>
+```
+
+Docker normally uses port `21000`; the native Mac receiver uses `20000`.
+An HTTPS server URL is also accepted. These are recording-server credentials,
+not provider API keys or an ngrok authtoken. Obtain the app key in your own
+terminal with `./omiloc pair` on that server; never send it through chat.
+Add another three fields with a different stable lowercase ID for each server.
+
+The file supports at most 16 servers and 32 KiB. IDs begin with a lowercase
+letter and contain up to 32 lowercase letters, digits, underscores or hyphens.
+Names contain 1–80 printable characters. Values may be quoted; they are read
+literally, without shell execution or variable expansion. The file must remain
+an owner-only regular file with mode `0600`. Invalid entries stop provisioning.
+
+Run `./iphone.command profile` after preparing the file. Debug also imports
+presets with `./iphone.command dev`, into its separate Keychain. To choose a
+different private file, set `OMI_LOCAL_SERVER_PRESETS_FILE` to its path in your
+local shell. The default `.env.servers` is optional; without it, an existing
+native `.env` with an app key provides one **Local Mac** preset. A legacy setup
+with only a pairing hash continues without automatic import.
+
+Presets arrive as saved entries, without connecting or changing the active
+server. Select an entry and tap **Check and connect**. Manual edits, deletions
+and active pairing survive updates; repeated imports do not overwrite them.
+Edit credentials on the phone to update an existing entry. Deleting a preset or
+signing out does not let a later launch silently restore it.
+
+Only a transient launch environment carries the validated catalog. Neither
+`.env.servers` nor its keys are bundled into the app, Dart defines, source files
+or build-attestation records. The app consumes the handoff once and stores the
+entries in Keychain, so ordinary launches from the app icon need no Mac session.
+Installing an app without launching it through this flow cannot import presets.
 
 [Reinstallation and build verification](DEVELOPMENT.md#iphone-builds) ·
 [Debug and hot reload](DEVELOPMENT.md#debug-on-iphone-and-hot-reload) ·

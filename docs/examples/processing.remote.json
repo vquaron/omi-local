@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "remote-live",
+      "name": "Remote Live",
+      "stage": "live",
+      "kind": "external",
+      "settings": {"url": "wss://live.example/asr"}
+    },
+    {
+      "id": "remote-stt",
+      "name": "Remote transcription",
+      "stage": "stt",
+      "kind": "openai-compatible",
+      "settings": {
+        "provider_url": "https://stt.example/v1",
+        "model": "your-model",
+        "language": "auto",
+        "diarization_model": "none"
+      }
+    },
+    {
+      "id": "remote-diarization",
+      "name": "Remote diarization",
+      "stage": "diarization",
+      "kind": "mycelia",
+      "settings": {"base_url": "https://diarization.example"}
+    }
+  ]
+}

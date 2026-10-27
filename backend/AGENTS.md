@@ -32,6 +32,12 @@ The separate `/v1/local/preview` endpoint supplies owner-scoped RAM-only drafts
 to the loopback library. It requires the existing paired key, rejects non-loopback
 clients, non-loopback receiving sockets and all forwarded headers, and uses
 `Cache-Control: no-store`. Never add draft text to the status endpoint, logs or a diagnostic file.
+Updated paired clients send bounded immutable parts to `/v1/local/audio/parts`.
+Authenticate before consuming bodies. Publish the complete WAV and metadata
+outside watcher staging, sync them, and return a receipt for that exact ID/hash.
+Retries must not overwrite or duplicate audio. The explicit outbox header makes
+the listen socket preview-only; legacy clients retain server WAV capture.
+See `docs/RECORDING_DURABILITY.md` for capability and recovery boundaries.
 Creation and recovery share the same source/codec constraint: CV1 uses Opus,
 phone uses PCM16. Invalid recovery metadata must leave the original parts intact.
 Offline capture rotates at decoded packet boundaries after five minutes without

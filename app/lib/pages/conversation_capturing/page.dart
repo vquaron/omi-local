@@ -13,6 +13,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/settings/local_runtime_status_card.dart';
+import 'package:omi/pages/conversations/widgets/temporary_recording_controls.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -22,6 +23,7 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
+import 'package:omi/widgets/live_translation_controls.dart';
 import 'package:omi/widgets/local_capture_feedback.dart';
 import 'package:omi/services/capture/local_capture_phase.dart';
 import 'package:omi/widgets/transcript.dart';
@@ -246,6 +248,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       key: Env.isOfflineRuntime ? const Key('local_capture_page_state') : null,
                     ),
                   ),
+                  if (Env.isOfflineRuntime)
+                    LiveTranslationToggle(
+                      enabled: provider.liveTranslationEnabled,
+                      language: provider.liveTranslationLanguage,
+                      otherLanguage: provider.liveTranslationOtherLanguage,
+                      bidirectional: provider.liveTranslationBidirectional,
+                      onChanged: provider.setLiveTranslation,
+                    ),
                 ],
               ),
             ),
@@ -261,6 +271,11 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                     child: LocalRuntimeStatusCard(source: provider.activeRecordingSource),
+                  ),
+                if (Env.isOfflineRuntime)
+                  LiveTranslationStatusHint(
+                    enabled: provider.liveTranslationEnabled,
+                    status: provider.liveTranslationStatus,
                   ),
                 Expanded(
                   child: Padding(
@@ -375,7 +390,16 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               ],
             ),
             floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-            floatingActionButton: (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+            floatingActionButton: Env.isOfflineRuntime
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Material(
+                      color: const Color(0xFF222222),
+                      borderRadius: BorderRadius.circular(24),
+                      child: TemporaryRecordingControls(provider: provider),
+                    ),
+                  )
+                : (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,

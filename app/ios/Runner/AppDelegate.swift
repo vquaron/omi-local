@@ -199,9 +199,11 @@ final class QuickActionsIconPatcher: NSObject {
     #if OMI_PERSONAL_LOCAL
     var localMacSettings: [String: String]? = nil
     let launchEnvironment = ProcessInfo.processInfo.environment
-    if let url = launchEnvironment["OMI_LOCAL_MAC_URL"], let key = launchEnvironment["OMI_LOCAL_MAC_KEY"] {
-        localMacSettings = ["url": url, "key": key]
+    if let presets = launchEnvironment["OMI_LOCAL_SERVER_PRESETS_B64"],
+       !presets.isEmpty, presets.utf8.count <= 65536 {
+        localMacSettings = ["server_presets_b64": presets]
     }
+    unsetenv("OMI_LOCAL_SERVER_PRESETS_B64")
     unsetenv("OMI_LOCAL_MAC_URL")
     unsetenv("OMI_LOCAL_MAC_KEY")
     #endif
@@ -216,6 +218,12 @@ final class QuickActionsIconPatcher: NSObject {
         if call.method == "isTestFlight" {
             let isTestFlight = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
             result(isTestFlight)
+        } else if call.method == "isSimulator" {
+            #if targetEnvironment(simulator)
+            result(true)
+            #else
+            result(false)
+            #endif
         } else {
             result(FlutterMethodNotImplemented)
         }

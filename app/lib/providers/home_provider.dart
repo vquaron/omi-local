@@ -109,6 +109,9 @@ class HomeProvider extends ChangeNotifier {
 
   Map<String, String> get availableLanguages => _serverLanguages ?? _bundledLanguages;
 
+  /// Offline picker floor for screens that run without a server-served list.
+  static Map<String, String> get bundledLanguages => _bundledLanguages;
+
   /// Cached list first so the UI never waits, then the server's. A failed fetch
   /// leaves whatever the picker already had.
   Future<void> loadAvailableLanguages({Future<Map<String, String>?> Function()? fetch}) async {

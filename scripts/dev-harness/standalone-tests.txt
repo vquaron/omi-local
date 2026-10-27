@@ -1,0 +1,30 @@
+# Active standalone harness suites. Paths are relative to the repository root.
+# Retained upstream desktop, memory, hook-installation and Typesense tests are
+# outside this snapshot's supported runtime and are not discovered by this runner.
+scripts/dev-harness/tests/test_cli.py
+scripts/dev-harness/tests/test_env_stage.py
+scripts/dev-harness/tests/test_install_recovery.py
+scripts/dev-harness/tests/test_ios_scene_lifecycle.py
+scripts/dev-harness/tests/test_ios_setup.py
+scripts/dev-harness/tests/test_live_install.py
+scripts/dev-harness/tests/test_local_launcher.py
+scripts/dev-harness/tests/test_local_library.py
+scripts/dev-harness/tests/test_local_live.py
+scripts/dev-harness/tests/test_local_live_translation.py
+scripts/dev-harness/tests/test_local_mac.py
+scripts/dev-harness/tests/test_local_provider_cli.py
+scripts/dev-harness/tests/test_local_provider_health.py
+scripts/dev-harness/tests/test_local_provider_http.py
+scripts/dev-harness/tests/test_local_provider_relay.py
+scripts/dev-harness/tests/test_local_providers.py
+scripts/dev-harness/tests/test_local_setup.py
+scripts/dev-harness/tests/test_local_stt.py
+scripts/dev-harness/tests/test_local_stt_watch.py
+scripts/dev-harness/tests/test_local_transcription.py
+scripts/dev-harness/tests/test_local_transport.py
+scripts/dev-harness/tests/test_providers.py
+scripts/dev-harness/tests/test_safety.py
+scripts/dev-harness/tests/test_server_presets.py
+scripts/dev-harness/tests/test_stt_install.py
+scripts/dev-harness/tests/test_tailscale_backend.py
+scripts/dev-harness/tests/test_transcription_lock.py

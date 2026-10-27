@@ -644,7 +644,22 @@ function prepare_ios_installation() {
   echo 'Подготовка к установке на iPhone проверена.' >&2
 }
 
+function install_personal_profile() {
+  local repo_root
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  PYTHONPATH="$repo_root/scripts/dev-harness" OMI_IOS_DEVICE_ID="$OMI_SELECTED_IOS_DEVICE" \
+    "${PYTHON:-$repo_root/backend/.venv/bin/python}" -m dev_harness.launch_iphone \
+    --build-profile --env "$repo_root/.env" \
+    --app "$repo_root/app/build/ios/Profile-dev-iphoneos/Runner.app" -- "$@"
+}
+
 function run_build_ios() {
+  # Provision only from private host files after artifact installation. No
+  # inherited launch credential may reach pub, CocoaPods or Xcode children.
+  unset OMI_LOCAL_SERVER_PRESETS_B64 DEVICECTL_CHILD_OMI_LOCAL_SERVER_PRESETS_B64 \
+    OMI_LOCAL_APP_KEY OMI_LOCAL_MAC_KEY OMI_LOCAL_MAC_URL NGROK_AUTHTOKEN \
+    DEVICECTL_CHILD_OMI_LOCAL_APP_KEY DEVICECTL_CHILD_OMI_LOCAL_MAC_KEY \
+    DEVICECTL_CHILD_OMI_LOCAL_MAC_URL DEVICECTL_CHILD_NGROK_AUTHTOKEN
   local flavor="${1:-dev}"
   shift || true
   if [[ "$flavor" != 'dev' ]]; then
@@ -690,7 +705,6 @@ function run_build_ios() {
     flutter_args+=("$arg")
   done
   prepare_ios_installation || return 1
-  local device_id="$OMI_SELECTED_IOS_DEVICE"
   personal_bundle_id >/dev/null || return 1
   write_personal_team_config \
     && prepare_mobile_build_env "$flavor" "$api_base_url" offline \
@@ -702,7 +716,7 @@ function run_build_ios() {
     && bash scripts/apply_personal_ios_plugin_overlay.sh \
     && pushd ios && pod install --repo-update && popd \
     && dart run build_runner build \
-    && flutter run --profile --flavor "$flavor" -d "$device_id" "${flutter_args[@]}" 2>&1 \
+    && install_personal_profile "${flutter_args[@]}" 2>&1 \
       | sed -u "s/${OMI_APPLE_TEAM_ID}/<redacted-team>/g"
 }
 

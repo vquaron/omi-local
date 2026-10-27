@@ -505,3 +505,74 @@ def test_runtime_journal_observes_final_completion_without_transcript(library):
     assert 'Началось финальное распознавание.' in messages
     assert 'Финальный транскрипт сохранён и доступен в аудиотеке.' in messages
     assert 'Синтетическая речь' not in json.dumps(messages, ensure_ascii=False)
+
+
+# Remote access: an explicit public origin behind Tailscale Serve, with identity.
+PUBLIC = 'https://bastion.example.ts.net:8444'
+
+
+def public_handler(library, **access):
+    from dev_harness.local_library import Access, hash_password
+    if 'password' in access:
+        access['password_hash'] = hash_password(access.pop('password'), iterations=1000)
+    return handler(library, Path(__file__).resolve().parents[3] / 'web-local', None, None, None,
+                   access=Access(origin=PUBLIC, **access))
+
+
+def public(library, path, http_handler, *, method='GET', extra=None, origin=PUBLIC):
+    headers = {'Host': 'bastion.example.ts.net:8444', 'Origin': origin, **(extra or {})}
+    return request(library, path, method=method, headers=headers, http_handler=http_handler)
+
+
+def test_public_origin_is_closed_without_configured_access(library):
+    server_handler = handler(library, Path(__file__).resolve().parents[3] / 'web-local')
+    assert public(library, '/api/recordings', server_handler)[0] == 403
+    assert public(library, '/api/recordings', server_handler, extra={'Tailscale-User-Login': 'me@example.com'})[0] == 403
+
+
+def test_tailscale_identity_opens_only_the_configured_origin(library):
+    server_handler = public_handler(library, logins='Me@example.com')
+    ok = {'Tailscale-User-Login': 'me@example.com'}
+    assert public(library, '/api/recordings', server_handler, extra=ok)[0] == 200
+    assert public(library, '/', server_handler, extra=ok)[0] == 200
+    assert public(library, '/api/recordings', server_handler)[0] == 403
+    assert public(library, '/api/recordings', server_handler, extra={'Tailscale-User-Login': 'other@example.com'})[0] == 403
+    assert public(library, '/api/recordings', server_handler, extra={**ok, 'X-Forwarded-For': '1.2.3.4'})[0] == 403
+    assert public(library, '/api/recordings', server_handler, extra=ok, origin='https://attacker.example')[0] == 403
+    assert request(library, '/api/recordings', headers={'Host': 'attacker.example:8444', **ok},
+                   http_handler=server_handler)[0] == 403
+    # Loopback access is unchanged, and identity headers never substitute for it.
+    assert request(library, '/api/recordings', http_handler=server_handler)[0] == 200
+    assert request(library, '/api/recordings', headers={'Host': '127.0.0.1:20000', **ok}, http_handler=server_handler)[0] == 403
+
+
+def test_password_login_prompts_and_verifies_constant_format(library):
+    import base64
+    from dev_harness.local_library import hash_password, verify_password
+    server_handler = public_handler(library, user='pk', password='correct horse')
+    status, headers, _ = public(library, '/api/recordings', server_handler)
+    assert status == 401 and headers['WWW-Authenticate'].startswith('Basic realm=')
+    basic = lambda text: {'Authorization': 'Basic ' + base64.b64encode(text.encode()).decode()}
+    assert public(library, '/api/recordings', server_handler, extra=basic('pk:correct horse'))[0] == 200
+    assert public(library, '/api/recordings', server_handler, extra=basic('pk:wrong'))[0] == 401
+    assert public(library, '/api/recordings', server_handler, extra=basic('other:correct horse'))[0] == 401
+    assert public(library, '/api/recordings', server_handler, extra={'Authorization': 'Bearer x'})[0] == 401
+    digest = hash_password('secret', iterations=1000)
+    assert digest.startswith('pbkdf2-sha256:1000:') and '$' not in digest
+    assert verify_password(digest, 'secret') and not verify_password(digest, 'secret ')
+    assert not verify_password('garbage', 'secret')
+
+
+def test_mutations_over_public_origin_keep_same_origin_markers(library):
+    record = library.scan()[0]
+    deleted = []
+    from dev_harness.local_library import Access
+    server_handler = handler(library, Path(__file__).resolve().parents[3] / 'web-local',
+                             lambda audio: deleted.append(audio) or {'status': 'deleted'}, None, None,
+                             access=Access(origin=PUBLIC, logins='me@example.com'))
+    path = '/api/recordings/' + record['id']
+    ok = {'Tailscale-User-Login': 'me@example.com'}
+    assert public(library, path, server_handler, method='DELETE', extra=ok)[0] == 403
+    assert not deleted
+    assert public(library, path, server_handler, method='DELETE', extra={**ok, 'X-Omiloc-Request': 'delete'})[0] == 200
+    assert deleted

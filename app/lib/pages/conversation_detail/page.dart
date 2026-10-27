@@ -24,6 +24,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
+import 'package:omi/pages/conversation_detail/widgets/local_transcript_stages.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -1743,6 +1744,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               );
             }
 
+            final localStages = conversation.externalIntegration?.localTranscriptStages;
+            final showLocalStages = localStages?.diarization != null;
             return getTranscriptWidget(
               false,
               segments,
@@ -1754,6 +1757,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               canDisplaySeconds: provider.canDisplaySeconds,
               isConversationDetail: true,
               bottomMargin: 150,
+              leadingItems: showLocalStages ? [LocalTranscriptStagesLine(stages: localStages!)] : const [],
+              leadingItemIds: showLocalStages ? const ['local-transcript-stages'] : const [],
               searchQuery: widget.searchQuery,
               currentResultIndex: widget.currentResultIndex,
               onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,

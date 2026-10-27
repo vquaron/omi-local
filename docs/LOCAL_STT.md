@@ -157,7 +157,9 @@ your own recording; use a positive `speaker_count` for a known participant count
 Labels identify voices within a recording, not people's names. With word timestamps,
 phrases are split at speaker changes; without them, each whole phrase is assigned
 by maximum overlap. Unmatched regions remain unknown. Community-1 uses exclusive
-speaker turns to align text. If diarization fails, intermediate transcription is
+speaker turns to align text. Zero-length fillers stay with adjacent timed words,
+including unknown speakers, without creating empty or out-of-order segments.
+If diarization fails, intermediate transcription is
 preserved for retry; a successful transcript is not published until both stages
 finish. Changing settings creates a separate result and preserves original audio
 and transcripts. This processes completed recordings; live preview remains separate.
@@ -188,11 +190,18 @@ Older jobs retain their previous mode; use `transcribe` for an older recording.
 
 ## Continuous recording and pending audio
 
-The local receiver saves a WAV part after five minutes of decoded audio and
-continues receiving into a new part on the same socket. The final partial part
-is saved when capture stops. Transcription consumes finished parts independently.
+Updated apps retain received packets on the phone and seal parts after at most
+five minutes of audio or Stop. Authenticated uploads publish completed WAVs;
+only a matching saved receipt releases the phone copy. Live preview uses the
+socket independently and does not create a duplicate recording.
+Older apps retain the receiver's five-minute WAV rotation on the same socket.
+Transcription consumes finished parts independently in both paths.
+See [recording delivery and recovery](RECORDING_DURABILITY.md) for retry,
+capability-check and physical-device boundaries.
 Conversations shows saved parts before a transcript exists, including queued,
 processing, failed and no-transcript outcomes. These cards are read-only views
 of the local audio library and disappear after successful transcript import.
+An unreadable queue or import receipt cannot make Conversations unavailable;
+audio without readable processing state remains visible as a saved recording.
 The foreground list refreshes every five seconds. Physical long-session and
 background reliability still require device verification.

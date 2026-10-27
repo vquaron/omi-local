@@ -42,3 +42,5 @@ backend/*.sqlite*
 **/*credentials*.json
 **/*service-account*.json
 **/serviceAccount*.json
+# Reviewed synthetic fixture required by doctor --inference; all other audio stays excluded.
+!scripts/dev-harness/fixtures/speech-check.wav

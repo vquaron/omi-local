@@ -143,3 +143,129 @@ def test_pending_projection_obeys_filters_and_merged_page_offsets():
     completed = [{'id': 'completed', 'created_at': now.replace(day=16)}]
     assert merge_local_recording_page(completed, pending, offset=0, limit=1) == pending
     assert merge_local_recording_page(completed, pending, offset=1, limit=1) == completed
+
+
+@pytest.mark.parametrize('broken', ['invalid_json', 'non_object', 'oversized', 'bad_entry', 'bad_state', 'symlink'])
+def test_invalid_optional_job_state_does_not_hide_saved_audio(tmp_path, monkeypatch, broken):
+    import hashlib
+    import json
+    import uuid
+    from utils import local_recording_rows as rows
+    from utils.offline_audio_capture import OfflineAudioCapture
+
+    storage = tmp_path / 'services/storage'
+    results = tmp_path / 'services/local-transcripts'
+    receipt = results / ('b' * 64) / 'import.json'
+    receipt.parent.mkdir(parents=True)
+    monkeypatch.setattr(rows, 'is_offline_runtime', lambda: True)
+    monkeypatch.setattr(rows, 'local_tunnel_enabled', lambda: True)
+    monkeypatch.setattr(rows, 'load_pairing', lambda: {'owner_uid': 'synthetic-owner'})
+    monkeypatch.setattr(rows, 'local_storage_root_from_env', lambda: storage)
+    monkeypatch.setenv('OMI_HARNESS_STATE_ROOT', str(tmp_path))
+    capture = OfflineAudioCapture(session_id=str(uuid.uuid4()), input_codec='pcm16', source='phone', root=storage)
+    capture.record_decoded_frame(encoded_bytes=32000, pcm=b'\x00\x00' * 16000)
+    capture.finalize()
+    queue = results / 'watch-queue.json'
+    if broken in {'bad_entry', 'bad_state'}:
+        key = hashlib.sha256(capture.session_id.encode()).hexdigest()
+        queue.write_text(json.dumps({key: [] if broken == 'bad_entry' else {'state': []}}))
+        receipt.write_text(json.dumps({'import': 'passed', 'capture_key': []}))
+    elif broken == 'symlink':
+        target = tmp_path / 'untrusted.json'
+        target.write_text('{}')
+        queue.symlink_to(target)
+        receipt.symlink_to(target)
+    else:
+        payload = {'invalid_json': '{', 'non_object': '[]', 'oversized': ' ' * (4 * 1024 * 1024) + '{}'}[broken]
+        queue.write_text(payload)
+        receipt.write_text(payload)
+    pending = rows.local_recording_rows('synthetic-owner')
+    assert len(pending) == 1
+    assert pending[0]['external_data']['local_recording']['status'] == 'saved'
+
+
+def test_pipeline_stage_outcomes_are_projected_with_fixed_fields_only():
+    data, result = manifest(), raw()
+    data['profile']['pipeline'] = {'stt': {'kind': 'openai-compatible'}, 'diarization': {'kind': 'mycelia'}}
+    result['diarization'] = {'turns': [[0.0, 3.5, 'SPEAKER_00']], 'speakers': 2}
+    result['processing'] = {
+        'stt': {'status': 'ready', 'provider_name': 'GPU whisper', 'model': 'large-v3-turbo', 'api_key': 'must-not-escape'},
+        'diarization': {'status': 'ready', 'provider_name': 'x' * 300},
+        'summary': {'status': 'disabled'},
+        'bogus': {'status': 'ready'},
+    }
+    conversation = build_conversation(result, data)
+    stages = conversation.external_data['local_transcript']['stages']
+    assert stages == {
+        'stt': {'status': 'ready', 'provider': 'GPU whisper'},
+        'diarization': {'status': 'ready', 'provider': 'x' * 100, 'speakers': 2},
+        'summary': {'status': 'disabled'},
+    }
+    assert 'must-not-escape' not in str(conversation.external_data)
+
+
+def test_legacy_results_without_processing_carry_no_stage_block():
+    conversation = build_conversation(raw(), manifest())
+    assert 'stages' not in conversation.external_data['local_transcript']
+
+
+def test_unexpected_stage_status_is_reported_as_unknown():
+    data, result = manifest(), raw()
+    result['processing'] = {'diarization': {'status': 'exploded', 'provider_name': 'GPU pyannote'}}
+    stages = build_conversation(result, data).external_data['local_transcript']['stages']
+    assert stages == {'diarization': {'status': 'unknown', 'provider': 'GPU pyannote'}}
+
+
+@pytest.mark.parametrize('state', ['pending', 'processing', 'failed', 'no_speech'])
+def test_saved_recording_stays_visible_until_import_succeeds(tmp_path, monkeypatch, state):
+    import hashlib
+    import json
+    import uuid
+    from utils import local_recording_rows as rows
+    from utils.offline_audio_capture import OfflineAudioCapture
+
+    storage = tmp_path / 'services/storage'
+    results = tmp_path / 'services/local-transcripts'
+    results.mkdir(parents=True)
+    monkeypatch.setattr(rows, 'is_offline_runtime', lambda: True)
+    monkeypatch.setattr(rows, 'local_tunnel_enabled', lambda: True)
+    monkeypatch.setattr(rows, 'load_pairing', lambda: {'owner_uid': 'synthetic-owner'})
+    monkeypatch.setattr(rows, 'local_storage_root_from_env', lambda: storage)
+    monkeypatch.setenv('OMI_HARNESS_STATE_ROOT', str(tmp_path))
+    capture = OfflineAudioCapture(session_id=str(uuid.uuid4()), input_codec='pcm16', source='phone', root=storage)
+    capture.record_decoded_frame(encoded_bytes=32000, pcm=b'\x00\x00' * 16000)
+    assert rows.local_recording_rows('synthetic-owner') == []  # unfinished input lives in the capture card
+    capture.finalize()
+    key = hashlib.sha256(capture.session_id.encode()).hexdigest()
+    queue = results / 'watch-queue.json'
+    queue.write_text(json.dumps({key: {'state': state, 'profile': {'api_key': 'never-return'}}}))
+    pending = rows.local_recording_rows('synthetic-owner')
+    assert len(pending) == 1
+    assert pending[0]['status'] == 'processing'
+    assert pending[0]['external_data'] == {'local_recording': {'status': state, 'duration_seconds': 1.0}}
+    assert rows.local_recording_rows('another-owner') == []
+    assert 'never-return' not in str(pending) and str(storage) not in str(pending)
+    queue.write_text(json.dumps({key: {'state': 'completed'}}))
+    assert rows.local_recording_rows('synthetic-owner') == []
+    # Manual import also retires the projection even if no queue job exists.
+    queue.write_text('{}')
+    assert len(rows.local_recording_rows('synthetic-owner')) == 1
+    (results / ('b' * 64)).mkdir()
+    (results / ('b' * 64) / 'import.json').write_text(json.dumps({'import': 'passed', 'capture_key': key}))
+    assert rows.local_recording_rows('synthetic-owner') == []
+
+
+def test_pending_projection_obeys_filters_and_merged_page_offsets():
+    from datetime import datetime, timezone
+    from utils.local_recording_rows import filter_local_recording_rows, merge_local_recording_page
+
+    now = datetime(2026, 9, 17, tzinfo=timezone.utc)
+    pending = [{'id': 'pending', 'created_at': now, 'source': 'omi'}]
+    filters = dict(statuses=['processing', 'completed'], sources=[], start_date=None, end_date=None,
+                   folder_id=None, starred=None)
+    assert filter_local_recording_rows(pending, **filters) == pending
+    for key, value in [('statuses', ['completed']), ('sources', ['phone']), ('folder_id', 'folder'), ('starred', True)]:
+        assert filter_local_recording_rows(pending, **{**filters, key: value}) == []
+    completed = [{'id': 'completed', 'created_at': now.replace(day=16)}]
+    assert merge_local_recording_page(completed, pending, offset=0, limit=1) == pending
+    assert merge_local_recording_page(completed, pending, offset=1, limit=1) == completed

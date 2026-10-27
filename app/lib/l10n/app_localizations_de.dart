@@ -10037,4 +10037,78 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get localMacServers => 'Gespeicherte Server';
+
+  @override
+  String get liveTranslation => 'Live-Übersetzung';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Übersetzen nach';
+
+  @override
+  String get liveTranslationHelp =>
+      'Der verbundene Server zeigt die Übersetzung unter dem Original. Automatisch wird das Zusammenfassungsmodell verwendet, sofern du in der Serverbibliothek kein anderes auswählst: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Auf dem verbundenen Server ist kein Übersetzungsmodell eingerichtet. Öffne seine Bibliothek: Settings → Summarization oder Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Die Übersetzung ist auf dem verbundenen Server nicht verfügbar. Prüfe seine Bibliothek: Settings → Translation.';
+
+  @override
+  String get diarization => 'Sprechertrennung';
+
+  @override
+  String get providerUnavailable => 'Server nicht erreichbar';
+
+  @override
+  String get providerMisconfigured => 'Anbietereinstellungen prüfen';
+
+  @override
+  String speakersCount(int count) {
+    return '$count Sprecher';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Sprechertrennung nicht durchgeführt';
+
+  @override
+  String get diarizationFailed => 'Sprechertrennung fehlgeschlagen';
+
+  @override
+  String get localProcessingHelp =>
+      'Live-Sprechermarkierungen stammen vom Live-Anbieter. Die Diarisierung unten verarbeitet abgeschlossene Aufnahmen.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'Stoppe die Aufnahme vor dem Wechsel. Die gewählten Server erhalten dein Audio.';
+
+  @override
+  String get localProcessingKeyHelp =>
+      'Ein leeres Feld behält den gespeicherten Schlüssel. Ein anderer Server benötigt einen eigenen Schlüssel.';
+
+  @override
+  String get localProcessingUnsupported => 'Aktualisiere den gekoppelten Server, um diese Einstellungen zu bearbeiten.';
+
+  @override
+  String get localProcessingFinished => 'Abgeschlossene Aufnahmen';
+
+  @override
+  String get localProcessingProbe => 'Verbindung testen';
+
+  @override
+  String get localProcessingPending =>
+      'Gespeicherte Änderungen sind noch nicht aktiv. Tippe auf Bestätigen, um sie anzuwenden.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Aktualisiere den Server, um Audio zu synchronisieren. Auf dem Telefon gespeicherte Audiodaten bleiben erhalten.';
+
+  @override
+  String get liveTranslationBidirectional => 'Übersetzung in beide Richtungen';
+
+  @override
+  String get liveTranslationPairHelp =>
+      'Die Sprache jedes Satzes erkennen und in die andere ausgewählte Sprache übersetzen.';
 }

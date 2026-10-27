@@ -13,6 +13,8 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/services/capture/local_audio_outbox.dart';
+import 'package:omi/services/auth/local_mac_session.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/hard_secret_detector.dart';
@@ -111,7 +113,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.geolocation,
     this.clientConversationId,
   }) {
-    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec'
+    var params =
+        '?language=$language&sample_rate=$sampleRate&codec=$codec'
         '${Env.usesLocalTunnel ? '' : '&uid=${SharedPreferencesUtil().uid}'}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
         '&conversation_timeout=${SharedPreferencesUtil().conversationSilenceDuration}';
@@ -149,7 +152,14 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     _socket = PureSocket(
       url,
-      extraHeaders: {if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation!.toJson())},
+      extraHeaders: {
+        if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation!.toJson()),
+        if (Env.usesLocalTunnel &&
+            LocalMacSession.instance.supportsAudioDelivery &&
+            (LocalAudioOutbox.shared?.activeRecordings ?? 0) > 0 &&
+            const {'omi', 'phone'}.contains(source))
+          'X-Omi-Local-Audio-Outbox': '1',
+      },
     );
     _socket.setListener(this);
   }
@@ -437,8 +447,9 @@ class TranscriptSocketServiceFactory {
     if (config.provider == SttProvider.geminiLive) {
       return GeminiStreamingSttSocket(
         apiKey: config.apiKey ?? '',
-        model:
-            config.effectiveModel.isNotEmpty ? config.effectiveModel : 'gemini-2.5-flash-native-audio-preview-12-2025',
+        model: config.effectiveModel.isNotEmpty
+            ? config.effectiveModel
+            : 'gemini-2.5-flash-native-audio-preview-12-2025',
         language: config.effectiveLanguage,
         sampleRate: sampleRate,
         transcoder: transcoder,
@@ -448,10 +459,12 @@ class TranscriptSocketServiceFactory {
     // Deepgram Live and other streaming providers
     final requestConfig = config.requestConfig;
     final url = requestConfig['url'] ?? config.effectiveUrl;
-    final headers =
-        requestConfig['headers'] != null ? Map<String, String>.from(requestConfig['headers']) : (config.headers ?? {});
-    final params =
-        requestConfig['params'] != null ? Map<String, String>.from(requestConfig['params']) : (config.params ?? {});
+    final headers = requestConfig['headers'] != null
+        ? Map<String, String>.from(requestConfig['headers'])
+        : (config.headers ?? {});
+    final params = requestConfig['params'] != null
+        ? Map<String, String>.from(requestConfig['params'])
+        : (config.params ?? {});
 
     // Build WebSocket URL with query params
     final wsUrl = _buildUrlWithParams(url, params);
@@ -475,10 +488,12 @@ class TranscriptSocketServiceFactory {
 
     final requestConfig = config.requestConfig;
     final url = requestConfig['url'] ?? config.effectiveUrl;
-    final headers =
-        requestConfig['headers'] != null ? Map<String, String>.from(requestConfig['headers']) : (config.headers ?? {});
-    final params =
-        requestConfig['params'] != null ? Map<String, String>.from(requestConfig['params']) : (config.params ?? {});
+    final headers = requestConfig['headers'] != null
+        ? Map<String, String>.from(requestConfig['headers'])
+        : (config.headers ?? {});
+    final params = requestConfig['params'] != null
+        ? Map<String, String>.from(requestConfig['params'])
+        : (config.params ?? {});
     final audioFieldName = requestConfig['audio_field_name'] ?? config.audioFieldName ?? 'file';
     final requestType = config.effectiveRequestType;
 

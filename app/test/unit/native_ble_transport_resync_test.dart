@@ -78,6 +78,39 @@ void main() {
     expect(states, [DeviceTransportState.disconnected, DeviceTransportState.connected]);
   });
 
+  test('radio off invalidates a cached link without a disconnect event and restores audio after radio on', () async {
+    await transport.dispose();
+    final hostApi = _FakeBleHostApi();
+    transport = NativeBleTransport(uuid, hostApi: hostApi);
+    addTearDown(() => BleBridge.instance.onBluetoothStateChanged('on'));
+    final states = <DeviceTransportState>[];
+    final stateSubscription = transport.connectionStateStream.listen(states.add);
+    addTearDown(stateSubscription.cancel);
+    BleBridge.instance.onBluetoothStateChanged('on');
+    BleBridge.instance.onDeviceReady(uuid, services);
+    final received = <List<int>>[];
+    final audio = transport.getCharacteristicStream(serviceUuid, charUuid).listen(received.add);
+    addTearDown(audio.cancel);
+    await Future<void>.delayed(Duration.zero);
+
+    // Adapter power can change without a per-peripheral disconnect callback.
+    BleBridge.instance.onBluetoothStateChanged('off');
+    BleBridge.instance.onDeviceReady(uuid, services); // Stale queued discovery.
+    await Future<void>.delayed(Duration.zero);
+    expect(states, [DeviceTransportState.connected, DeviceTransportState.disconnected]);
+    expect(hostApi.subscribed, hasLength(1));
+
+    BleBridge.instance.onBluetoothStateChanged('on');
+    BleBridge.instance.onDeviceReady(uuid, services);
+    BleBridge.instance.onCharacteristicValueUpdated(uuid, serviceUuid, charUuid, Uint8List.fromList([1, 2, 3, 4]));
+    await Future<void>.delayed(Duration.zero);
+    expect(states.last, DeviceTransportState.connected);
+    expect(hostApi.subscribed, hasLength(2), reason: 'A new radio session must rewrite its audio notification');
+    expect(received, [
+      [1, 2, 3, 4],
+    ], reason: 'The existing capture listener receives audio after recovery');
+  });
+
   test('isBleAudioCharacteristicUuid covers wearable audio notify chars', () {
     expect(isBleAudioCharacteristicUuid(audioDataStreamCharacteristicUuid), isTrue);
     expect(isBleAudioCharacteristicUuid(friendPendantAudioCharacteristicUuid), isTrue);
@@ -87,6 +120,13 @@ void main() {
     expect(isBleAudioCharacteristicUuid(plaudNotifyCharUuid), isTrue);
     expect(isBleAudioCharacteristicUuid(batteryLevelCharacteristicUuid), isFalse);
     expect(isBleAudioCharacteristicUuid(plaudWriteCharUuid), isFalse);
+  });
+
+  test('disposed transports release their adapter listener', () async {
+    BleBridge.instance.onDeviceReady(uuid, services);
+    await transport.dispose();
+    addTearDown(() => BleBridge.instance.onBluetoothStateChanged('on'));
+    expect(() => BleBridge.instance.onBluetoothStateChanged('off'), returnsNormally);
   });
 
   test('after reconnect, silent audio CCCD is retried once then left dead', () {
@@ -144,8 +184,9 @@ void main() {
       BleBridge.instance.onDeviceReady(uuid, audioServices);
       async.flushMicrotasks();
 
-      final subscribesBeforeWatch =
-          hostApi.subscribed.where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase())).length;
+      final subscribesBeforeWatch = hostApi.subscribed
+          .where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase()))
+          .length;
       expect(subscribesBeforeWatch, greaterThanOrEqualTo(1));
 
       async.elapse(const Duration(seconds: 4));

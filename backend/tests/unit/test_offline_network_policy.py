@@ -34,6 +34,14 @@ def test_policy_rejects_public_configured_endpoint() -> None:
         OfflineEgressPolicy.from_environ({"API_BASE_URL": "https://api.omi.me"})
 
 
+def test_processing_library_adds_only_its_exact_loopback_endpoint() -> None:
+    policy = OfflineEgressPolicy.from_environ({'OMI_LOCAL_PROCESSING_URL': 'http://127.0.0.1:20001'})
+    policy.require('127.0.0.1', 20001)
+    for host, port in [('127.0.0.1', 20002), ('192.168.1.20', 20001), ('provider.example', 443)]:
+        with pytest.raises(OfflineEgressBlocked):
+            policy.require(host, port)
+
+
 def test_installed_audit_hook_blocks_before_dns_and_allows_local_socket(tmp_path: Path) -> None:
     reserved = socket.socket()
     reserved.bind(("127.0.0.1", 0))

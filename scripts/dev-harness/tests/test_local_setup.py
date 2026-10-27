@@ -64,6 +64,60 @@ def test_pair_refuses_noninteractive_secret_output(monkeypatch):
         local_setup.pair(SimpleNamespace())
 
 
+@pytest.mark.parametrize('ready,inference', [(False, False), (False, True), (True, False), (True, True)])
+def test_doctor_requires_runtime_readiness_before_optional_inference(monkeypatch, capsys, ready, inference):
+    from dev_harness import local_transport, runtime_probe
+
+    cfg, probes = SimpleNamespace(), []
+    monkeypatch.setattr(local_transport, 'prepare_environment', lambda *_a, **_k: None)
+    monkeypatch.setattr(local_setup.config, 'load_config', lambda *_a, **_k: cfg)
+    monkeypatch.setattr(local_setup, 'check', lambda value: None)
+    monkeypatch.setattr(local_setup, 'status', lambda value: 0 if ready else 1)
+    monkeypatch.setattr(runtime_probe, 'native_inference', lambda value: probes.append(value))
+    assert local_setup.main(['doctor', *(['--inference'] if inference else [])]) == (0 if ready else 1)
+    output = capsys.readouterr()
+    assert probes == ([cfg] if ready and inference else [])
+    if ready:
+        assert 'runtime readiness passed' in output.out
+        assert ('Inference was not tested' in output.out) == (not inference)
+    else:
+        assert 'readiness failed' in output.err and 'readiness passed' not in output.out
+
+
+@pytest.mark.parametrize('owned', [False, True])
+def test_native_status_requires_owned_process_before_health(monkeypatch, capsys, owned):
+    cfg = SimpleNamespace(layout=SimpleNamespace(process_manifest=Path('synthetic-processes.json')))
+    records = [{'service': name, 'pid': index} for index, name in
+               enumerate(('firestore', 'auth', 'redis', 'backend', 'library'), 1)]
+    monkeypatch.setattr(local_setup.cli, '_process_records', lambda _: records)
+    def ownership(*_a, **kwargs):
+        if kwargs['service'] == 'backend' and not owned:
+            raise local_setup.safety.SafetyError('private process details')
+    monkeypatch.setattr(local_setup.safety, 'validate_owned_pid', ownership)
+    def health(_cfg, service):
+        if service == 'backend' and not owned:
+            pytest.fail('cannot trust a foreign listener')
+        return True, 'ready'
+    monkeypatch.setattr(local_setup.cli, '_service_health', health)
+    monkeypatch.setattr(local_setup, 'require_transcription_ready', lambda _: None)
+    assert local_setup.status(cfg) == (0 if owned else 1)
+    output = capsys.readouterr().out
+    assert ('ownership unavailable' in output) == (not owned)
+    assert 'private' not in output
+
+
+def test_native_status_does_not_treat_library_only_as_a_running_server(monkeypatch, capsys):
+    cfg = SimpleNamespace(local_transport='tailscale',
+                          layout=SimpleNamespace(process_manifest=Path('synthetic-processes.json')))
+    monkeypatch.setattr(local_setup.cli, '_process_records', lambda _: [{'service': 'library', 'pid': 42}])
+    monkeypatch.setattr(local_setup.safety, 'validate_owned_pid', lambda *_a, **_k: None)
+    monkeypatch.setattr(local_setup.cli, '_service_health', lambda *_a: (True, 'ready'))
+    monkeypatch.setattr(local_setup, 'require_transcription_ready', lambda _: None)
+    assert local_setup.status(cfg) == 1
+    output = capsys.readouterr().out
+    assert 'backend: not running' in output and 'library: ready' in output
+
+
 def test_setup_does_not_open_library_or_claim_success_when_live_is_unavailable(monkeypatch, tmp_path):
     from dev_harness import config
 
@@ -301,3 +355,98 @@ def test_lan_environment_finds_jdk_in_another_brew_prefix(tmp_path, found):
             'PATH': os.environ['PATH'] if found else str(java.parent) + os.pathsep + os.environ['PATH']},
        capture_output=True, text=True, check=True)
     assert result.stdout.strip() == str(java)
+
+
+@pytest.mark.parametrize('outcome', ['speech', 'no_speech', 'busy'])
+def test_external_docker_inference_uses_selected_provider_and_lock_without_import(
+    tmp_path, monkeypatch, capsys, outcome,
+):
+    import fcntl
+    import json
+    import wave
+    import httpx
+    from dev_harness import config, local_provider_http, runtime_probe
+
+    for name, value in {'PROVIDER_MODE': 'offline', 'OMI_CONTAINER_RUNTIME': '1',
+                        'OMI_LOCAL_TRANSPORT': 'ngrok', 'OMI_DEV_BIND_HOST': '127.0.0.1',
+                        'OMI_LOCAL_STATE_ROOT': str(tmp_path / '.local'),
+                        'OMI_LOCAL_INSTANCE': 'external-probe'}.items():
+        monkeypatch.setenv(name, value)
+    cfg = config.load_config(tmp_path, create_layout=True)
+    audio = tmp_path / 'scripts/dev-harness/fixtures/speech-check.wav'
+    audio.parent.mkdir(parents=True)
+    with wave.open(str(audio), 'wb') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(b'\x00\x00' * 16000)
+    provider = {'id': 'external', 'name': 'Synthetic external STT', 'stage': 'stt',
+                'kind': 'openai-compatible', 'credential_ref': 'synthetic-credential',
+                'settings': {'provider_url': 'https://stt.example/v1', 'model': 'selected-model', 'language': 'auto'}}
+    (cfg.layout.state_root / 'providers.json').write_text(json.dumps({
+        'version': 1, 'revision': 1, 'profiles': [provider], 'effective': {'stt': provider}}))
+    (cfg.layout.state_root / 'provider-secrets.json').write_text(
+        json.dumps({'synthetic-credential': 'synthetic-token'}))
+    monkeypatch.setattr(runtime_probe.urllib.request, 'build_opener',
+                        lambda *_a, **_k: pytest.fail('External mode must not probe the built-in STT listener'))
+    monkeypatch.setattr(runtime_probe.local_stt, 'backend_step',
+                        lambda *_a, **_k: pytest.fail('Synthetic inference must not import a recording'))
+    requests = []
+
+    def respond(request):
+        requests.append(request.url.path)
+        assert request.url.host == 'stt.example'
+        assert request.headers['authorization'] == 'Bearer synthetic-token'
+        if request.url.path == '/v1/models':
+            return httpx.Response(200, json={'data': [{'id': 'selected-model'}]})
+        assert request.url.path == '/v1/audio/transcriptions'
+        body = request.read()
+        assert b'selected-model' in body and b'filename="audio.wav"' in body and b'RIFF' in body
+        segments = [] if outcome == 'no_speech' else [{'start': 0, 'end': 1, 'text': 'Synthetic speech.'}]
+        return httpx.Response(200, json={'segments': segments})
+
+    factory = httpx.Client
+    monkeypatch.setattr(local_provider_http.httpx, 'Client',
+                        lambda **kwargs: factory(transport=httpx.MockTransport(respond), **kwargs))
+    results = cfg.layout.services_dir / 'local-transcripts'
+    results.mkdir()
+    with (results / '.lock').open('w') as lock:
+        if outcome == 'busy':
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if outcome == 'speech':
+            runtime_probe.docker_inference(tmp_path, 'external')
+        else:
+            with pytest.raises(ValueError, match='busy' if outcome == 'busy' else 'no timed speech'):
+                runtime_probe.docker_inference(tmp_path, 'external')
+    assert requests == ([] if outcome == 'busy' else ['/v1/models', '/v1/audio/transcriptions'])
+    assert [path.name for path in results.iterdir()] == ['.lock']
+    with (results / '.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    output = capsys.readouterr().out
+    assert ('no recording imported' in output) == (outcome == 'speech')
+    assert 'synthetic-token' not in output and 'Synthetic speech.' not in output
+
+
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+def test_builtin_docker_inference_keeps_device_and_model_contract(monkeypatch, capsys, device):
+    import json
+    from dev_harness import runtime_probe
+
+    root = Path(__file__).resolve().parents[3]
+
+    def health(url, timeout):
+        assert url == 'http://127.0.0.1:10301/health' and timeout == 5
+        return io.StringIO(json.dumps({'device': device}))
+
+    monkeypatch.setattr(runtime_probe.urllib.request, 'build_opener',
+                        lambda *_: SimpleNamespace(open=health))
+    monkeypatch.setenv('STT_MODEL', 'builtin-model')
+
+    def transcribe(url, model, language, audio, duration):
+        assert (url, model, language) == ('http://127.0.0.1:10301/v1', 'builtin-model', 'auto')
+        assert audio == root / 'scripts/dev-harness/fixtures/speech-check.wav'
+        return {'segments': [{'start': 0, 'end': min(1, duration), 'text': 'Synthetic speech.'}]}
+
+    monkeypatch.setattr(runtime_probe.local_openai_stt, 'transcribe', transcribe)
+    runtime_probe.docker_inference(root, device)
+    assert 'Verified STT device: ' + device in capsys.readouterr().out

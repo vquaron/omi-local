@@ -191,6 +191,7 @@ if "run" in args and "stt" in args and os.environ.get("DOCKER_FAIL") == "cuda":
     print("CUDA unavailable", file=sys.stderr)
     sys.exit(7)
 if "up" in args and os.environ.get("DOCKER_FAIL") == "up": sys.exit(7)
+if "exec" in args and args[-1] == "health" and os.environ.get("DOCKER_FAIL") == "health": sys.exit(7)
 ''')
     docker.chmod(0o755)
     tailscale = fake / 'tailscale'
@@ -203,7 +204,7 @@ if "up" in args and os.environ.get("DOCKER_FAIL") == "up": sys.exit(7)
     tailscale.chmod(0o755)
     env = dict(os.environ, PATH=str(fake) + os.pathsep + os.environ['PATH'],
                DOCKER_CALLS=str(calls), OMI_TAILSCALE_CLI=str(tailscale))
-    for name in ('OMI_LOCAL_TRANSPORT', 'OMI_DOCKER_TRANSPORT', 'OMI_DOCKER_DEVICE', 'OMI_DOCKER_GPU_ID',
+    for name in ('OMI_LOCAL_TRANSPORT', 'OMI_DOCKER_TRANSPORT', 'OMI_DOCKER_DEVICE', 'OMI_DOCKER_STT', 'OMI_DOCKER_GPU_ID',
                  'OMI_TAILSCALE_IP', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'STT_MODEL', 'STT_REVISION', 'STT_THREADS'):
         env.pop(name, None)
     env.update(overrides)
@@ -224,6 +225,45 @@ def test_wrapper_start_reuses_saved_selection_without_build_or_download(tmp_path
     assert '--no-build' in startup and '--pull' in startup and 'never' in startup
     assert ('--watch' in startup) == (command == 'dev')
     assert ('--wait' in startup) == (command == 'up')
+
+
+def test_wrapper_refuses_readable_settings_before_docker_operations(tmp_path):
+    result, _ = docker_wrapper(tmp_path, ['status'])
+    assert result.returncode == 0
+    settings = tmp_path / 'project with spaces/.env.docker'
+    settings.chmod(0o644)
+    result, calls = docker_wrapper(tmp_path, ['up'])
+    assert result.returncode != 0 and 'chmod 600' in result.stderr
+    assert calls == []
+
+
+def test_wrapper_provider_export_uses_running_registry_without_startup_or_banner(tmp_path):
+    result, calls = docker_wrapper(tmp_path, ['providers', 'export'], OMI_DOCKER_DEVICE='auto')
+    assert result.returncode == 0 and result.stdout == ''
+    assert [call['args'] for call in calls] == [['compose', '--env-file', '/dev/null', '-f', 'compose.yaml', 'exec', '-T',
+        'app', 'python', '-m', 'dev_harness.local_provider_cli', 'export']]
+
+
+@pytest.mark.parametrize('option', [['--api-key-env', 'TEST_PROVIDER_KEY'], ['--api-key-env=TEST_PROVIDER_KEY']])
+def test_wrapper_provider_key_passes_only_environment_name(tmp_path, option):
+    result, calls = docker_wrapper(tmp_path, ['providers', 'save', '--file', '-', *option],
+                                   TEST_PROVIDER_KEY='synthetic-private-key')
+    assert result.returncode == 0
+    assert calls[0]['args'][7:10] == ['-e', 'TEST_PROVIDER_KEY', 'app']
+    assert 'synthetic-private-key' not in json.dumps(calls) + result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('failure', ['', 'health'])
+def test_doctor_reports_runtime_readiness_without_claiming_inference(tmp_path, failure):
+    result, calls = docker_wrapper(tmp_path, ['doctor'], DOCKER_FAIL=failure)
+    assert any(call['args'][-1:] == ['health'] for call in calls)
+    assert not any('inference' in call['args'] for call in calls)
+    if failure:
+        assert result.returncode != 0 and 'readiness failed' in result.stderr
+        assert 'readiness passed' not in result.stdout
+    else:
+        assert result.returncode == 0
+        assert 'readiness passed' in result.stdout and 'Inference was not tested' in result.stdout
 
 
 @pytest.mark.parametrize('env', [
@@ -301,6 +341,46 @@ def test_docker_config_is_never_executed(tmp_path):
     assert 'touch injected' not in result.stderr
 
 
+@pytest.mark.parametrize('command', ['up', 'dev'])
+def test_wrapper_external_stt_skips_builtin_model_and_gpu(tmp_path, command):
+    result, calls = docker_wrapper(tmp_path, ['bootstrap', '--stt', 'external', '--device', 'cuda',
+                                             '--transport', 'tailscale'])
+    assert result.returncode == 0, result.stderr
+    compose_calls = [call for call in calls if call['args'][0] == 'compose']
+    assert all('compose.external.yaml' in call['args'] for call in compose_calls)
+    assert all('compose.gpu.yaml' not in call['args'] for call in compose_calls)
+    assert next(call['args'] for call in calls if 'build' in call['args'])[-2:] == ['build', 'app']
+    assert not any('download' in call['args'] for call in calls)
+    assert 'OMI_DOCKER_STT=external' in (tmp_path / 'project with spaces/.env.docker').read_text()
+    result, calls = docker_wrapper(tmp_path, [command], OMI_DOCKER_STT='builtin')
+    assert result.returncode == 0, result.stderr
+    assert all('compose.external.yaml' in call['args'] for call in calls)
+    assert not any('build' in call['args'] or 'run' in call['args'] or 'compose.gpu.yaml' in call['args'] for call in calls)
+    result, calls = docker_wrapper(tmp_path, ['doctor', '--inference'])
+    assert result.returncode == 0, result.stderr
+    assert any(call['args'][-2:] == ['inference', 'external'] for call in calls)
+
+
+def test_wrapper_rejects_unknown_stt_mode(tmp_path):
+    result, calls = docker_wrapper(tmp_path, ['up'], OMI_DOCKER_STT='remote')
+    assert result.returncode != 0 and calls == []
+
+
+def test_external_compose_render_drops_builtin_stt_from_default_services():
+    docker = shutil.which('docker')
+    if not docker or subprocess.run([docker, 'compose', 'version'], capture_output=True).returncode:
+        pytest.skip('Docker Compose plugin unavailable')
+    def services(*extra):
+        result = subprocess.run([docker, 'compose', '--env-file', '/dev/null', '-f', 'compose.yaml',
+                                 '-f', 'compose.tailscale.yaml', '-f', 'compose.external.yaml', *extra,
+                                 'config', '--services'], cwd=ROOT,
+                                env=dict(os.environ, OMI_TAILSCALE_IP='100.100.12.34'),
+                                capture_output=True, text=True, check=True)
+        return set(result.stdout.split())
+    assert services() == {'app', 'ingress'}
+    assert services('--profile', 'builtin-stt') == {'app', 'ingress', 'stt'}
+
+
 def test_tailscale_compose_render_publishes_only_paired_api_on_host_vpn():
     docker = shutil.which('docker')
     if not docker:
@@ -324,8 +404,20 @@ def test_tailscale_compose_render_publishes_only_paired_api_on_host_vpn():
         assert services[name]['network_mode'] == 'service:ingress'
         assert 'ports' not in services[name]
     assert services['app']['volumes'][0]['type'] == 'volume'
+    ingress_config = next(mount for mount in services['ingress']['volumes']
+                          if mount['target'] == '/etc/nginx/nginx.conf')
+    assert ingress_config['type'] == 'bind' and ingress_config['read_only'] is True
+    assert ingress_config.get('bind', {}).get('create_host_path', False) is False
     gpu = services['stt']['deploy']['resources']['reservations']['devices'][0]
     assert gpu['device_ids'] == ['0'] and 'count' not in gpu
+
+
+def test_static_tripwire_context_allows_only_the_reviewed_speech_fixture():
+    patterns = (ROOT / '.dockerignore').read_text().splitlines()
+    audio_inclusions = [line for line in patterns if line.startswith('!') and line.endswith(('.wav', '.mp3', '.m4a', '.pcm'))]
+    assert audio_inclusions == ['!scripts/dev-harness/fixtures/speech-check.wav']
+    assert patterns.index(audio_inclusions[0]) > patterns.index('**/*.wav')
+    assert all(pattern in patterns for pattern in ('**/*.wav', '**/*.mp3', '**/*.m4a', '**/*.pcm'))
 
 
 def test_runtime_pins_keep_vcs_commit_and_platform_markers():

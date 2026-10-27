@@ -10019,4 +10019,77 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get localMacServers => 'சேமித்த சேவையகங்கள்';
+
+  @override
+  String get liveTranslation => 'நேரடி மொழிபெயர்ப்பு';
+
+  @override
+  String get liveTranslationTargetLanguage => 'இந்த மொழிக்கு மொழிபெயர்';
+
+  @override
+  String get liveTranslationHelp =>
+      'இணைக்கப்பட்ட சேவையகம் மூல உரையின் கீழே மொழிபெயர்ப்பைக் காட்டும். சேவையக நூலகத்தில் வேறு மாதிரியைத் தேர்ந்தெடுக்காவிட்டால் சுருக்க மாதிரி தானாகப் பயன்படும்: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'இணைக்கப்பட்ட சேவையகத்தில் மொழிபெயர்ப்பு மாதிரி அமைக்கப்படவில்லை. அதன் நூலகத்தைத் திறக்கவும்: Settings → Summarization அல்லது Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'இணைக்கப்பட்ட சேவையகத்தில் மொழிபெயர்ப்பு கிடைக்கவில்லை. அதன் நூலகத்தைச் சரிபார்க்கவும்: Settings → Translation.';
+
+  @override
+  String get diarization => 'பேச்சாளர் பிரிப்பு';
+
+  @override
+  String get providerUnavailable => 'சேவையகம் கிடைக்கவில்லை';
+
+  @override
+  String get providerMisconfigured => 'வழங்குநர் அமைப்புகளைச் சரிபார்க்கவும்';
+
+  @override
+  String speakersCount(int count) {
+    return '$count பேச்சாளர்கள்';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'பேச்சாளர் பிரிப்பு செய்யப்படவில்லை';
+
+  @override
+  String get diarizationFailed => 'பேச்சாளர் பிரிப்பு தோல்வி';
+
+  @override
+  String get localProcessingHelp =>
+      'நேரலைப் பேச்சாளர் அடையாளங்கள் Live வழங்குநரிடமிருந்து வருகின்றன. கீழே உள்ள பேச்சாளர் பிரிப்பு முடிந்த பதிவுகளைச் செயலாக்குகிறது.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'மாற்றுவதற்கு முன் பதிவை நிறுத்தவும். தேர்ந்தெடுத்த சேவையகங்கள் உங்கள் ஒலியைப் பெறுகின்றன.';
+
+  @override
+  String get localProcessingKeyHelp => 'காலியாக விட்டால் சேமித்த விசை இருக்கும். வேறு சேவையகத்திற்குத் தனி விசை தேவை.';
+
+  @override
+  String get localProcessingUnsupported => 'இந்த அமைப்புகளை மாற்ற இணைக்கப்பட்ட சேவையகத்தைப் புதுப்பிக்கவும்.';
+
+  @override
+  String get localProcessingFinished => 'முடிந்த பதிவுகள்';
+
+  @override
+  String get localProcessingProbe => 'இணைப்பைச் சோதிக்கவும்';
+
+  @override
+  String get localProcessingPending =>
+      'சேமித்த மாற்றங்கள் இன்னும் செயலில் இல்லை. பயன்படுத்த உறுதிப்படுத்து என்பதைத் தட்டவும்.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'ஒலியை ஒத்திசைக்க சேவையகத்தைப் புதுப்பிக்கவும். தொலைபேசியில் சேமித்த ஆடியோ பாதுகாக்கப்படும்.';
+
+  @override
+  String get liveTranslationBidirectional => 'இருவழி மொழிபெயர்ப்பு';
+
+  @override
+  String get liveTranslationPairHelp =>
+      'ஒவ்வொரு சொற்றொடரின் மொழியையும் கண்டறிந்து, தேர்ந்தெடுத்த மற்றொரு மொழிக்கு மொழிபெயர்க்கவும்.';
 }

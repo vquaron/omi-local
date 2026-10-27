@@ -9981,4 +9981,74 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get localMacServers => 'Захаваныя серверы';
+
+  @override
+  String get liveTranslation => 'Пераклад ужывую';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Перакладаць на';
+
+  @override
+  String get liveTranslationHelp =>
+      'Пераклад на падключаным серверы з\'яўляецца пад арыгіналам. Аўтаматычна выкарыстоўваецца мадэль падсумавання, калі іншая не выбрана ў бібліятэцы сервера: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'На падключаным серверы не наладжана мадэль перакладу. Адкрыйце яго бібліятэку: Settings → Summarization або Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Пераклад недаступны на падключаным серверы. Праверце яго бібліятэку: Settings → Translation.';
+
+  @override
+  String get diarization => 'Дыярызацыя';
+
+  @override
+  String get providerUnavailable => 'Сервер недаступны';
+
+  @override
+  String get providerMisconfigured => 'Праверце налады правайдара';
+
+  @override
+  String speakersCount(int count) {
+    return 'Прамоўцаў: $count';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Дыярызацыя не выконвалася';
+
+  @override
+  String get diarizationFailed => 'Памылка дыярызацыі';
+
+  @override
+  String get localProcessingHelp =>
+      'Меткі спікераў у рэальным часе паступаюць ад Live-правайдара. Дыярызацыя ніжэй апрацоўвае завершаныя запісы.';
+
+  @override
+  String get localProcessingApplyHelp => 'Перад пераключэннем спыніце запіс. Выбраныя серверы атрымліваюць ваша аўдыя.';
+
+  @override
+  String get localProcessingKeyHelp => 'Пустое поле захоўвае ключ. Іншаму серверу патрэбны ўласны ключ.';
+
+  @override
+  String get localProcessingUnsupported => 'Абнавіце падключаны сервер, каб змяняць гэтыя налады.';
+
+  @override
+  String get localProcessingFinished => 'Завершаныя запісы';
+
+  @override
+  String get localProcessingProbe => 'Праверыць злучэнне';
+
+  @override
+  String get localProcessingPending => 'Захаваныя змены яшчэ не дзейнічаюць. Націсніце «Пацвердзіць», каб прымяніць.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Абнавіце сервер для перадачы аўдыя. Аўдыя, захаванае на тэлефоне, застаецца.';
+
+  @override
+  String get liveTranslationBidirectional => 'Двухбаковы пераклад';
+
+  @override
+  String get liveTranslationPairHelp => 'Вызначаць мову кожнай фразы і перакладаць на іншую выбраную мову.';
 }

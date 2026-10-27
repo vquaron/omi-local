@@ -30,7 +30,7 @@ from database.google_credentials import prepare_google_credentials
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
-from routers import account_cutover, action_items, conversations, goals, other, speech_profile, transcribe, users
+from routers import account_cutover, action_items, conversations, goals, other, speech_profile, transcribe, users, local_processing
 
 if not _OFFLINE_RUNTIME:
     from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
@@ -197,6 +197,7 @@ app.add_middleware(
 
 if _OFFLINE_RUNTIME:
     _router_modules = (
+        local_processing,
         transcribe,
         conversations,
         action_items,

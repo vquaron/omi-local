@@ -105,17 +105,17 @@ def check(url, model, *, timeout=5, selected=False, key=''):
 
 def transcribe(url, model, language, audio, duration, *, selected=False, key=''):
     try:
+        from . import local_provider_http as transport
         if selected:
-            from . import local_provider_http as transport
             endpoint, session = transport.validate_url(url), transport.client(key=key, timeout=3600)
         else:
             endpoint, session = validate_url(url), httpx.Client(trust_env=False, follow_redirects=False, timeout=3600)
         with session as client:
             with audio.open('rb') as source:
-                response = client.post(endpoint + '/audio/transcriptions',
-                                       data=fields(model, language), files={'file': ('audio.wav', source, 'audio/wav')})
-            response.raise_for_status()
-            raw = transport.json_response(response, limit=32 * 1024 * 1024) if selected else response.json()
+                raw = transport.post_json(client, endpoint + '/audio/transcriptions',
+                                          limit=32 * 1024 * 1024, deadline_seconds=3600,
+                                          data=fields(model, language),
+                                          files={'file': ('audio.wav', source, 'audio/wav')})
             return normalize(raw, duration)
     except (httpx.HTTPError, OSError, ValueError):
         raise ProviderError('STT request failed; original WAV retained') from None

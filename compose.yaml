@@ -21,6 +21,11 @@ services:
       OMI_DEV_BIND_HOST: 127.0.0.1
       OMI_HARNESS_PRIVATE_UMASK: '077'
       STT_MODEL: ${STT_MODEL:-Systran/faster-whisper-small}
+      # Optional remote library access through Tailscale Serve; see docs/DOCKER.md.
+      OMI_LIBRARY_PUBLIC_ORIGIN: ${OMI_LIBRARY_PUBLIC_ORIGIN:-}
+      OMI_LIBRARY_TAILSCALE_LOGIN: ${OMI_LIBRARY_TAILSCALE_LOGIN:-}
+      OMI_LIBRARY_USER: ${OMI_LIBRARY_USER:-}
+      OMI_LIBRARY_PASSWORD_HASH: ${OMI_LIBRARY_PASSWORD_HASH:-}
     volumes:
       - state:/data
     healthcheck:
@@ -35,7 +40,12 @@ services:
       - '127.0.0.1:21000:22000'
       - '127.0.0.1:21001:22001'
     volumes:
-      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - type: bind
+        source: ./docker/nginx.conf
+        target: /etc/nginx/nginx.conf
+        read_only: true
+        bind:
+          create_host_path: false
     restart: unless-stopped
   stt:
     build:

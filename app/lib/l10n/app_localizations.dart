@@ -18542,6 +18542,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved servers'**
   String get localMacServers;
+
+  /// No description provided for @liveTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'Live translation'**
+  String get liveTranslation;
+
+  /// No description provided for @liveTranslationTargetLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate to'**
+  String get liveTranslationTargetLanguage;
+
+  /// No description provided for @liveTranslationHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate on the connected server. The original stays; translation appears under each line. The active Summarization model is used automatically unless you select a Translation model in the server library: Settings → Translation.'**
+  String get liveTranslationHelp;
+
+  /// No description provided for @liveTranslationUnconfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'No translation model is configured on the connected server. Open its web library → Settings → Summarization or Translation → Save → Use.'**
+  String get liveTranslationUnconfigured;
+
+  /// No description provided for @liveTranslationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation is unavailable on the connected server. Check its web library → Settings → Translation.'**
+  String get liveTranslationFailed;
+
+  /// No description provided for @diarization.
+  ///
+  /// In en, this message translates to:
+  /// **'Diarization'**
+  String get diarization;
+
+  /// No description provided for @providerUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Server unavailable'**
+  String get providerUnavailable;
+
+  /// No description provided for @providerMisconfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Check provider settings'**
+  String get providerMisconfigured;
+
+  /// Number of distinct speakers found by diarization
+  ///
+  /// In en, this message translates to:
+  /// **'{count} speakers'**
+  String speakersCount(int count);
+
+  /// No description provided for @diarizationNotPerformed.
+  ///
+  /// In en, this message translates to:
+  /// **'Diarization not performed'**
+  String get diarizationNotPerformed;
+
+  /// No description provided for @diarizationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Diarization failed'**
+  String get diarizationFailed;
+
+  /// No description provided for @localProcessingHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Live speaker labels come from the Live provider. Diarization below processes finished recordings.'**
+  String get localProcessingHelp;
+
+  /// No description provided for @localProcessingApplyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop recording before switching. Selected servers receive your audio.'**
+  String get localProcessingApplyHelp;
+
+  /// No description provided for @localProcessingKeyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Blank keeps the saved key. A different server requires its own key.'**
+  String get localProcessingKeyHelp;
+
+  /// No description provided for @localProcessingUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Update the paired server to edit these settings.'**
+  String get localProcessingUnsupported;
+
+  /// No description provided for @localProcessingFinished.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished recordings'**
+  String get localProcessingFinished;
+
+  /// No description provided for @localProcessingProbe.
+  ///
+  /// In en, this message translates to:
+  /// **'Test connection'**
+  String get localProcessingProbe;
+
+  /// No description provided for @localProcessingPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved changes are not active. Tap Confirm to apply.'**
+  String get localProcessingPending;
+
+  /// No description provided for @localAudioServerUpdateRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Update the server to sync audio. Audio saved on the phone is kept.'**
+  String get localAudioServerUpdateRequired;
+
+  /// No description provided for @liveTranslationBidirectional.
+  ///
+  /// In en, this message translates to:
+  /// **'Two-way translation'**
+  String get liveTranslationBidirectional;
+
+  /// No description provided for @liveTranslationPairHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Detect the language of each phrase and translate into the other selected language.'**
+  String get liveTranslationPairHelp;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

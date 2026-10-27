@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ipaddress
+import math
 import time
 from urllib.parse import urlsplit
 
@@ -70,6 +71,41 @@ def metadata_get(client, url, *, limit=2 * 1024 * 1024, deadline_seconds=15):
                 raise ValueError('Ответ сервера слишком большой.')
             chunks.append(chunk)
         return httpx.Response(response.status_code, content=b''.join(chunks))
+
+
+def post_json(client, url, *, limit=2 * 1024 * 1024, deadline_seconds=180, **kwargs):
+    """Read a bounded provider response before parsing it or retaining its content.
+
+    HTTPX's timeout is per I/O operation. Check elapsed time between chunks as
+    well, so a provider cannot keep a job alive by indefinitely trickling bytes.
+    Request identity encoding: decoding a compressed chunk before checking its
+    size could allocate an arbitrarily large intermediate buffer.
+    """
+    if type(limit) is not int or limit <= 0 or not math.isfinite(deadline_seconds) or deadline_seconds <= 0:
+        raise ValueError('Недопустимые ограничения ответа сервера.')
+    deadline = time.monotonic() + deadline_seconds
+    timeout = {name: min(value, deadline_seconds) if value is not None else deadline_seconds
+               for name, value in client.timeout.as_dict().items()}
+    try:
+        with client.stream('POST', url, headers={'Accept-Encoding': 'identity'},
+                           timeout=httpx.Timeout(**timeout), follow_redirects=False, **kwargs) as response:
+            if not 200 <= response.status_code < 300:
+                raise ValueError('Сервер отклонил запрос. Проверьте адрес, ключ и модель.')
+            if response.headers.get('Content-Encoding', 'identity').lower().strip() not in {'', 'identity'}:
+                raise ValueError('Сервер вернул неподдерживаемый ответ.')
+            body = bytearray()
+            for chunk in response.iter_bytes():
+                if time.monotonic() > deadline:
+                    raise ValueError('Превышено время ожидания ответа сервера.')
+                if len(chunk) > limit - len(body):
+                    raise ValueError('Ответ сервера слишком большой.')
+                body.extend(chunk)
+            if time.monotonic() > deadline:
+                raise ValueError('Превышено время ожидания ответа сервера.')
+            # Deliberately discard upstream headers, request URL and credentials.
+            return json_response(httpx.Response(response.status_code, content=bytes(body)), limit=limit)
+    except (httpx.HTTPError, OSError):
+        raise ValueError('Не удалось получить ответ сервера.') from None
 
 
 def json_response(response, *, limit=2 * 1024 * 1024):

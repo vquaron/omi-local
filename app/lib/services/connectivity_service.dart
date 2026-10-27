@@ -15,17 +15,17 @@ class ConnectivityService {
 
   InternetConnection? _internetConnection;
   InternetConnection get internetConnection => _internetConnection ??= InternetConnection.createInstance(
-        useDefaultOptions: false,
-        checkInterval: const Duration(seconds: 10),
-        customCheckOptions: [
-          InternetCheckOption(uri: Uri.parse('https://one.one.one.one'), timeout: const Duration(seconds: 3)),
-          InternetCheckOption(
-            uri: Uri.parse('https://api.omi.me/v1/health'),
-            timeout: const Duration(seconds: 3),
-            responseStatusFn: (response) => response.statusCode < 500,
-          ),
-        ],
-      );
+    useDefaultOptions: false,
+    checkInterval: const Duration(seconds: 10),
+    customCheckOptions: [
+      InternetCheckOption(uri: Uri.parse('https://one.one.one.one'), timeout: const Duration(seconds: 3)),
+      InternetCheckOption(
+        uri: Uri.parse('https://api.omi.me/v1/health'),
+        timeout: const Duration(seconds: 3),
+        responseStatusFn: (response) => response.statusCode < 500,
+      ),
+    ],
+  );
   final Connectivity _connectivity = Connectivity();
   StreamSubscription? _connectivitySubscription;
   StreamSubscription? _internetSubscription;
@@ -39,6 +39,7 @@ class ConnectivityService {
   bool _offlineRuntime = false;
   Timer? _tunnelProbeTimer;
   bool _probing = false;
+  bool _notifyConnectedAfterProbe = false;
 
   Future<void> init({bool? offlineRuntime}) async {
     if (_isInitialized) return;
@@ -74,7 +75,10 @@ class ConnectivityService {
 
   void _handleConnectivityChange(List<ConnectivityResult> result) {
     if (Env.usesLocalTunnel) {
-      unawaited(refreshLocalTunnel());
+      // Wi-Fi -> cellular can keep health reachable while the old WebSocket
+      // remains half-open. Publish this successful route change even if the
+      // preceding reachability value was also true.
+      unawaited(refreshLocalTunnel(notifyWhenConnected: true));
       return;
     }
     if (_offlineRuntime) {
@@ -103,8 +107,10 @@ class ConnectivityService {
   static bool hasTunnelTransport(List<ConnectivityResult> result) =>
       hasLocalNetworkTransport(result) || result.contains(ConnectivityResult.mobile);
 
-  Future<void> refreshLocalTunnel() async {
-    if (!Env.usesLocalTunnel || _probing) return;
+  Future<void> refreshLocalTunnel({bool notifyWhenConnected = false}) async {
+    if (!Env.usesLocalTunnel) return;
+    _notifyConnectedAfterProbe |= notifyWhenConnected;
+    if (_probing) return;
     _probing = true;
     final address = Env.apiBaseUrl;
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
@@ -117,13 +123,16 @@ class ConnectivityService {
       final request = await client.getUrl(Uri.parse(address!).resolve('v1/health')).timeout(const Duration(seconds: 3));
       request.followRedirects = false;
       final response = await request.close().timeout(const Duration(seconds: 3));
-      if (address == Env.apiBaseUrl)
-        _updateConnectionState(response.statusCode == 200 && LocalMacSession.instance.isSignedIn);
+      if (address == Env.apiBaseUrl) {
+        final connected = response.statusCode == 200 && LocalMacSession.instance.isSignedIn;
+        _updateConnectionState(connected, notifyIfUnchanged: connected && _notifyConnectedAfterProbe);
+      }
     } catch (_) {
       if (address == Env.apiBaseUrl) _updateConnectionState(false);
     } finally {
       client.close(force: true);
       _probing = false;
+      _notifyConnectedAfterProbe = false;
     }
   }
 
@@ -131,8 +140,8 @@ class ConnectivityService {
     _updateConnectionState(status == InternetStatus.connected);
   }
 
-  void _updateConnectionState(bool newIsConnected) {
-    if (_isConnected != newIsConnected) {
+  void _updateConnectionState(bool newIsConnected, {bool notifyIfUnchanged = false}) {
+    if (_isConnected != newIsConnected || notifyIfUnchanged) {
       _isConnected = newIsConnected;
       _connectionChangeController.add(_isConnected);
     }

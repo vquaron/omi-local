@@ -34,6 +34,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 
 typedef BleDiagnosticsLoader = Future<BleDeviceDiagnostics> Function(String deviceId);
+typedef ConnectionLoader = Future<DeviceConnection?> Function(String deviceId, {bool force});
 typedef FindDeviceRunner = Future<bool> Function(BtDevice device);
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
@@ -56,6 +57,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   DateTime? _deviceSessionStartedAt;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
   final FindDeviceRunner _findDeviceRunner;
+  final ConnectionLoader _connectionLoader;
+  final Future<int> Function(String deviceId) _batteryLevelLoader;
+
+  /// Bumped whenever the link drops. An in-flight connect that finishes after
+  /// the drop belongs to a dead link and must not mark the device connected.
+  int _linkGeneration = 0;
+
+  static Future<DeviceConnection?> _defaultConnectionLoader(String deviceId, {bool force = false}) =>
+      ServiceManager.instance().device.ensureConnection(deviceId, force: force);
+
+  bool _linkStillUp(int generation, DeviceConnection? connection) =>
+      generation == _linkGeneration && connection != null && connection.status == DeviceConnectionState.connected;
   Future<bool>? _findDeviceRequest;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   StreamSubscription? _bleChargingStatusListener;
@@ -98,9 +111,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
-  DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader, FindDeviceRunner? findDeviceRunner})
-      : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
-        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner {
+  DeviceProvider({
+    BleDiagnosticsLoader? bleDiagnosticsLoader,
+    FindDeviceRunner? findDeviceRunner,
+    ConnectionLoader? connectionLoader,
+    Future<int> Function(String deviceId)? batteryLevelLoader,
+  })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
+        _connectionLoader = connectionLoader ?? _defaultConnectionLoader,
+        _batteryLevelLoader = batteryLevelLoader ?? _retrieveBatteryLevel {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _showPairingLostDialog;
   }
@@ -269,7 +288,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     await ServiceManager.instance().device.disconnectDevice();
   }
 
-  Future<int> _retrieveBatteryLevel(String deviceId) async {
+  static Future<int> _retrieveBatteryLevel(String deviceId) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return -1;
@@ -481,9 +500,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     try {
-      var connection = await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: true);
-      if (connection != null) {
-        await setConnectedDevice(connection.device);
+      final generation = _linkGeneration;
+      var connection = await _connectionLoader(pairedDeviceId, force: true);
+      if (_linkStillUp(generation, connection)) {
+        await setConnectedDevice(connection!.device);
         setisDeviceStorageSupport();
         SharedPreferencesUtil().deviceName = connection.device.name;
         setIsConnected(true);
@@ -522,6 +542,25 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
+  }
+
+  /// After the app returns to the foreground the cached state can be stale:
+  /// native may have lost the link without the debounced event reaching Dart.
+  Future<void> reconcileConnection() async {
+    final current = connectedDevice;
+    if (current == null) return;
+    final generation = _linkGeneration;
+    DeviceConnection? connection;
+    try {
+      connection = await _connectionLoader(current.id);
+    } catch (e) {
+      Logger.debug('reconcileConnection: $e');
+    }
+    if (generation != _linkGeneration || connectedDevice?.id != current.id) return;
+    if (connection == null || connection.status != DeviceConnectionState.connected) {
+      _linkGeneration++;
+      onDeviceDisconnected();
+    }
   }
 
   void onDeviceDisconnected() async {
@@ -590,13 +629,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void _onDeviceConnected(BtDevice device) async {
     Logger.debug('_onConnected inside: $connectedDevice');
+    final linkGeneration = _linkGeneration;
     final deviceSetup = setConnectedDevice(device);
     final connectionSession = _firmwareUpdateCheckSessionGuard.capture();
     await deviceSetup;
-    if (connectionSession == null || !_isCurrentDeviceSession(connectionSession)) {
+    if (connectionSession == null ||
+        linkGeneration != _linkGeneration ||
+        !_isCurrentDeviceSession(connectionSession)) {
       Logger.debug('Discarding device setup continuation from a stale connection session');
       return;
     }
+    bool isCurrent() => linkGeneration == _linkGeneration && _isCurrentDeviceSession(connectionSession);
 
     if (captureProvider != null) {
       captureProvider?.updateRecordingDevice(device);
@@ -606,7 +649,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setIsConnected(true);
 
     // Read initial battery level
-    int currentLevel = await _retrieveBatteryLevel(device.id);
+    int currentLevel = await _batteryLevelLoader(device.id);
+    if (!isCurrent()) return;
     if (currentLevel != -1) {
       batteryLevel = currentLevel;
       BatteryWidgetService().updateBatteryInfo(
@@ -619,7 +663,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Then set up listeners for battery changes and charging status
     await initiateBleBatteryListener();
+    if (!isCurrent()) return;
     await initiateChargingStatusListener();
+    if (!isCurrent()) return;
     if (batteryLevel != -1 && batteryLevel < 20) {
       _hasLowBatteryAlerted = false;
     }
@@ -628,8 +674,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       device: device,
       userInitiated: captureProvider?.shouldAutomaticallyStartDeviceRecording ?? false,
     );
+    if (!isCurrent()) return;
 
     await getDeviceInfo();
+    if (!isCurrent()) return;
     SharedPreferencesUtil().deviceName = device.name;
 
     // Wals — pass the firmware resolved by getDeviceInfo() above so background
@@ -767,11 +815,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _handleDeviceConnected(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
+    final generation = _linkGeneration;
+    var connection = await _connectionLoader(deviceId);
+    if (!_linkStillUp(generation, connection)) {
+      Logger.debug('Discarding a connection result for a link that already dropped');
       return;
     }
-    _onDeviceConnected(connection.device);
+    _onDeviceConnected(connection!.device);
   }
 
   void _checkFirmwareUpdates() async {
@@ -1039,7 +1089,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _connectDebouncer.cancel();
         // Check if this is the paired device or currently connected device
         // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
-        if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
+        // The stored pairing counts too: a first connect can still be in flight.
+        if (deviceId == connectedDevice?.id ||
+            deviceId == pairedDevice?.id ||
+            deviceId == SharedPreferencesUtil().btDevice.id) {
+          _linkGeneration++;
           _disconnectDebouncer.run(onDeviceDisconnected);
         }
         break;

@@ -21,6 +21,7 @@ from routers.listen.contracts import CustomSttMode, ListenRequest
 from routers.listen.local_status import require_local_status, snapshot as local_status_snapshot
 from routers.listen.local_status import require_local_preview, preview_snapshot as local_preview_snapshot
 from routers.listen.runtime import run_listen_session
+from routers.local_audio import build_local_audio_router
 from utils.client_device import (
     ClientDeviceContext,
     resolve_client_device_from_websocket_auth_message,
@@ -31,6 +32,7 @@ from utils.executors import db_executor, run_blocking
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+router.include_router(build_local_audio_router(auth.get_current_user_uid))
 _ACCOUNT_DELETION_RECHECK_SECONDS = 30
 
 

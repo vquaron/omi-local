@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:omi/services/auth/local_mac_session.dart';
+import 'package:omi/services/capture/local_audio_outbox.dart';
 import 'dart:ui';
 // trigger rebuild
 
@@ -90,6 +91,7 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
 import 'package:omi/utils/offline_network_policy.dart';
+import 'package:omi/utils/offline_onboarding.dart';
 
 /// Firebase parameters for the current flavor, resolved identically in every engine.
 FirebaseOptions _firebaseOptionsForFlavor() => Env.profile == AppEnvironmentProfile.localDev
@@ -161,11 +163,13 @@ Future _init() async {
     Env.init(DevEnv());
   }
   await SharedPreferencesUtil.init();
+  applyOfflineOnboardingDefaults();
   await LocalMacSession.instance.restore();
   await LocalMacSession.instance.importLaunchSettings();
   Env.validateProfilePairing();
   validateApplicationStartupRouting();
   OfflineNetworkPolicy.installFromEnv();
+  await LocalAudioOutbox.initializeProduction();
 
   FlutterForegroundTask.initCommunicationPort();
 
@@ -193,6 +197,9 @@ Future _init() async {
   // builds always use the established production backend.
   if (F.env == Environment.prod) {
     Env.isTestFlight = await EnvironmentDetector.isTestFlight();
+  }
+  if (Env.isOfflineRuntime) {
+    Env.iosSimulator = await EnvironmentDetector.isIosSimulator();
   }
 
   bool isAuth = await resolveStartupAuth(() => AuthService.instance.getIdToken());
@@ -376,8 +383,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(

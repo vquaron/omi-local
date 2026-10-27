@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 import webbrowser
 
-from . import cli, config, local_launcher, local_library, local_stt_watch, local_live, local_transcription
+from . import cli, config, local_launcher, local_library, local_stt_watch, local_live, local_transcription, safety
 
 
 class SetupError(ValueError):
@@ -119,9 +119,21 @@ def status(cfg):
     if not records:
         print('Native services: stopped. Run: ./omiloc up')
         return 1
-    healthy = True
+    required = {'firestore', 'auth', 'redis', 'backend', 'library'}
+    if getattr(cfg, 'local_transport', '') == 'ngrok':
+        required.add('ngrok')
+    missing = required - {record['service'] for record in records}
+    healthy = not missing
+    for name in sorted(missing):
+        print(f'{name}: not running')
     for record in records:
         name = record['service']
+        try:
+            safety.validate_owned_pid(int(record['pid']), process_manifest=cfg.layout.process_manifest, service=name)
+        except (ValueError, KeyError, OSError, safety.SafetyError):
+            healthy = False
+            print(f'{name}: ownership unavailable')
+            continue
         ok, _ = cli._service_health(cfg, name)
         print(f'{name}: ' + ('ready' if ok else 'unavailable'))
         healthy = healthy and ok
@@ -174,11 +186,15 @@ def main(argv=None):
             return local_launcher.open_library(cfg)
         check(cfg)
         print('Native prerequisites and configured models passed.')
+        if status(cfg):
+            print('Native runtime readiness failed. Inspect logs; run up if the stack is stopped.', file=sys.stderr)
+            return 1
+        print('Native runtime readiness passed. Phone authentication and audio delivery require separate checks.')
         if args.inference:
             from .runtime_probe import native_inference
             native_inference(cfg)
         else:
-            print('Run doctor --inference to verify synthetic transcription.')
+            print('Inference was not tested. Run doctor --inference to transcribe synthetic speech.')
         return 0
     except (ValueError, OSError, RuntimeError, subprocess.SubprocessError) as error:
         # Application errors are deliberately static; low-level exceptions may contain secrets.

@@ -72,37 +72,61 @@ class _AuthComponentState extends State<AuthComponent> {
                     const SizedBox(height: 32),
 
                     if (Env.isOfflineRuntime) ...[
-                      OutlinedButton(
-                        key: const ValueKey('local-mac-open'),
-                        onPressed: () async {
-                          final connected = await Navigator.of(context).push<bool>(
-                            MaterialPageRoute(builder: (_) => const LocalMacPage()),
-                          );
-                          if (connected == true && mounted) widget.onSignIn();
-                        },
-                        child: Text(context.l10n.localMacTitle),
+                      // Pairing with the Mac is the only sign-in a physical phone can complete.
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          key: const ValueKey('local-mac-open'),
+                          onPressed: () async {
+                            HapticFeedback.mediumImpact();
+                            final connected = await Navigator.of(context).push<bool>(
+                              MaterialPageRoute(builder: (_) => const LocalMacPage(popOnConnect: true)),
+                            );
+                            if (connected == true && mounted) widget.onSignIn();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const FaIcon(FontAwesomeIcons.laptop, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                context.l10n.localMacTitle,
+                                style:
+                                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      if (!Env.usesLocalTunnel)
+                      if (!Env.usesLocalTunnel && Env.authEmulatorSignInAvailable) ...[
+                        const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
+                          height: 48,
+                          child: OutlinedButton(
                             key: const ValueKey('offline-local-sign-in'),
                             onPressed: () {
                               HapticFeedback.mediumImpact();
                               provider.onLocalEmulatorSignIn(widget.onSignIn);
                             },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.black,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white70,
+                              side: const BorderSide(color: Colors.white24),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                             ),
                             child: Text(
                               '${context.l10n.offline} — ${context.l10n.continueButton}',
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
                             ),
                           ),
                         ),
+                      ],
                     ] else ...[
                       // Sign in buttons
                       if (Platform.isIOS || Platform.isAndroid) ...[

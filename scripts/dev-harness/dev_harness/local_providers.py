@@ -18,10 +18,11 @@ import uuid
 from .local_provider_http import auth_headers, validate_url
 
 
-STAGES = ('live', 'stt', 'diarization', 'summary')
+STAGES = ('live', 'stt', 'diarization', 'summary', 'translation')
 KINDS = {'live': {'external', 'whisperlivekit'},
          'stt': {'whisperkit', 'whisperx', 'parakeet-mlx', 'openai-compatible'},
-         'diarization': {'pyannote', 'mycelia'}, 'summary': {'openai-compatible'}}
+         'diarization': {'pyannote', 'mycelia'}, 'summary': {'openai-compatible'},
+         'translation': {'openai-compatible'}}
 ENGINE_FIELDS = {'provider_url', 'model', 'language', 'compute_type', 'batch_size', 'python',
                  'library_path', 'assets_path', 'runtime_revision', 'device', 'chunk_duration',
                  'overlap_duration', 'diarization_model'}
@@ -106,7 +107,7 @@ def validate_profile(value, *, models=False):
     allowed = (ENGINE_FIELDS if stage == 'stt' else LIVE_FIELDS if stage == 'live' else
                SPEAKER_FIELDS if kind == 'pyannote' else
                {'base_url', 'min_speakers', 'max_speakers'} if stage == 'diarization' else
-               {'base_url', 'model'})
+               {'base_url', 'model', 'reasoning'})
     if set(data) - allowed:
         raise SettingsError('Параметры не соответствуют выбранному типу провайдера.')
     for key in data:
@@ -154,8 +155,12 @@ def validate_profile(value, *, models=False):
         number(data, 'speaker_count', 0, 0, 32)
     else:
         data['base_url'] = endpoint(data, 'base_url')
-        if stage == 'summary':
+        if stage in {'summary', 'translation'}:
             text_field(data, 'model', required=not models, limit=256)
+            if data.get('reasoning', 'default') not in {'default', 'off'}:
+                raise SettingsError('Режим рассуждений: по умолчанию или отключён.', field='reasoning')
+            if data.get('reasoning') == 'default':
+                data.pop('reasoning')
         else:
             for key in ('min_speakers', 'max_speakers'):
                 if key in data:
@@ -264,14 +269,31 @@ class Registry:
     def read(self):
         state = self._load()
         effective = {stage: self._public(state['effective'].get(stage)) for stage in STAGES}
+        effective['translation'] = self._public(self._translation(state))
         return {'version': 1, 'revision': state['revision'],
                 'profiles': [self._public(p) for p in state['profiles']], 'effective': effective,
-                'active': {stage: p['id'] if p else None for stage, p in effective.items()}}
+                'active': {stage: p['id'] if (p := state['effective'].get(stage)) else None for stage in STAGES}}
+
+    @staticmethod
+    def _translation(state):
+        """An explicit translator overrides the connected server's active text LLM.
+
+        Resolve only applied settings, never drafts or speech-recognition models.
+        Keep the credential reference pinned to that exact model/endpoint version.
+        """
+        effective = state['effective']
+        if effective.get('translation'):
+            return deepcopy(effective['translation'])
+        summary = effective.get('summary')
+        if summary and summary['kind'] == 'openai-compatible':
+            return {**deepcopy(summary), 'stage': 'translation', 'inherited_from': 'summary'}
+        return None
 
     def snapshot(self, stage):
         if stage not in STAGES:
             raise SettingsError('Неизвестный этап обработки.')
-        return deepcopy(self._load()['effective'].get(stage))
+        state = self._load()
+        return self._translation(state) if stage == 'translation' else deepcopy(state['effective'].get(stage))
 
     def pipeline(self):
         effective = self._load()['effective']
@@ -293,6 +315,10 @@ class Registry:
         previous = next((p for p in state['profiles'] if p['id'] == profile.get('id')), None)
         if previous and (previous['stage'], previous['kind']) != (profile['stage'], profile['kind']):
             raise SettingsError('Для другого типа создайте новую карточку.')
+        # Embedded execution is registry-owned metadata, not an editable field.
+        # Editing/exporting a legacy card must not turn it into a separate worker.
+        if previous and previous.get('embedded'):
+            profile['embedded'] = True
         if previous and identity(previous) == identity(profile) and previous.get('credential_ref'):
             profile['credential_ref'] = previous['credential_ref']
         if body.get('clear_key'):

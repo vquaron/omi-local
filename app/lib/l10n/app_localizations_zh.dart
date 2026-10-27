@@ -9752,4 +9752,70 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get localMacServers => '已保存的服务器';
+
+  @override
+  String get liveTranslation => '实时翻译';
+
+  @override
+  String get liveTranslationTargetLanguage => '翻译为';
+
+  @override
+  String get liveTranslationHelp => '已连接的服务器会在原文下方显示译文。默认自动使用摘要模型，除非您在服务器资料库的 Settings → Translation 中选择其他模型。';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      '已连接的服务器尚未配置翻译模型。请打开其资料库：Settings → Summarization 或 Translation → Save → Use。';
+
+  @override
+  String get liveTranslationFailed => '已连接的服务器暂时无法翻译。请检查其资料库：Settings → Translation。';
+
+  @override
+  String get diarization => '说话人分离';
+
+  @override
+  String get providerUnavailable => '服务器不可用';
+
+  @override
+  String get providerMisconfigured => '请检查提供方设置';
+
+  @override
+  String speakersCount(int count) {
+    return '$count 位说话人';
+  }
+
+  @override
+  String get diarizationNotPerformed => '未执行说话人分离';
+
+  @override
+  String get diarizationFailed => '说话人分离失败';
+
+  @override
+  String get localProcessingHelp => '实时说话人标签来自 Live 提供商。下方的说话人分离处理已完成的录音。';
+
+  @override
+  String get localProcessingApplyHelp => '切换前请停止录音。所选服务器将接收您的音频。';
+
+  @override
+  String get localProcessingKeyHelp => '留空可保留已保存的密钥。其他服务器需要自己的密钥。';
+
+  @override
+  String get localProcessingUnsupported => '请更新已配对的服务器以编辑这些设置。';
+
+  @override
+  String get localProcessingFinished => '已完成的录音';
+
+  @override
+  String get localProcessingProbe => '测试连接';
+
+  @override
+  String get localProcessingPending => '已保存的更改尚未生效。点击“确认”以应用。';
+
+  @override
+  String get localAudioServerUpdateRequired => '请更新服务器以同步音频。手机上保存的音频会保留。';
+
+  @override
+  String get liveTranslationBidirectional => '双向翻译';
+
+  @override
+  String get liveTranslationPairHelp => '识别每句话的语言，并翻译成所选的另一种语言。';
 }

@@ -75,6 +75,10 @@ def test_static_tripwire_engine_owns_all_native_channel_registration():
     assert 'registry.registrar(forPlugin: "OmiPhoneCallsPlugin")' in channels
     assert 'takeLocalMacSettings' in channels
     assert 'localMacSettings = nil' in channels
+    assert 'unsetenv("OMI_LOCAL_SERVER_PRESETS_B64")' in channels
+    assert 'presets.utf8.count <= 65536' in channels
+    assert '["server_presets_b64": presets]' in channels
+    assert '["url": url, "key": key]' not in channels
     assert 'unsetenv("OMI_LOCAL_MAC_KEY")' in channels
 
 

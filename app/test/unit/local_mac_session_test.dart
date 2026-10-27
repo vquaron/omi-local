@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,6 +36,45 @@ void main() {
     OfflineNetworkPolicy.resetForTesting();
   });
 
+  test('existing pairing refreshes delivery capability before capture without changing credentials', () async {
+    final original = LocalMacSession(probe: (_, __) async => {'uid': 'alice'});
+    await original.connect(url, key);
+    var probes = 0;
+    final restored = LocalMacSession(
+      probe: (_, __) async {
+        probes++;
+        return {'uid': 'alice', 'local_audio_delivery_version': 2};
+      },
+    );
+    await restored.restore();
+    expect(restored.supportsAudioDelivery, isFalse);
+    await restored.ensureAudioDelivery();
+    await restored.ensureAudioDelivery();
+    expect(probes, 1);
+    expect(restored.supportsAudioDelivery, isTrue);
+    expect(restored.address, url);
+    expect(restored.accessKey, key);
+  });
+
+  test('legacy server without outbox capability fails protected capture and preserves pairing', () async {
+    final session = LocalMacSession(probe: (_, __) async => {'uid': 'alice'});
+    await session.connect(url, key);
+    await expectLater(session.ensureAudioDelivery(), throwsA(isA<LocalAudioDeliveryUnsupported>()));
+    expect(session.isSignedIn, isTrue);
+    expect(session.address, url);
+    expect(session.accessKey, key);
+    expect(session.supportsAudioDelivery, isFalse);
+  });
+
+  test('version-one server requires update before version-two Opus context can be sent', () async {
+    final session = LocalMacSession(probe: (_, __) async => {'uid': 'alice', 'local_audio_delivery_version': 1});
+    await session.connect(url, key);
+    await expectLater(session.ensureAudioDelivery(), throwsA(isA<LocalAudioDeliveryUnsupported>()));
+    expect(session.supportsAudioDelivery, isFalse);
+    expect(session.accessKey, key);
+    expect(session.address, url);
+  });
+
   test('saved servers migrate pairing and draft once without activating either', () async {
     final session = LocalMacSession(probe: (_, __) async => {'uid': 'alice'});
     await session.connect(url, key);
@@ -53,11 +93,13 @@ void main() {
 
   test('saved server edits retain identity and exact credentials across restart and rejection', () async {
     var probes = 0;
-    final session = LocalMacSession(probe: (base, submitted) async {
-      probes++;
-      if (base.host != 'synthetic.ngrok.app') throw LocalMacUnauthorized();
-      return {'uid': 'alice'};
-    });
+    final session = LocalMacSession(
+      probe: (base, submitted) async {
+        probes++;
+        if (base.host != 'synthetic.ngrok.app') throw LocalMacUnauthorized();
+        return {'uid': 'alice'};
+      },
+    );
     await session.readServers(); // Fresh catalog.
     await session.connect(url, key);
     final server = await session.saveServer(name: 'Docker', address: '100.64.0.1:21000', key: key);
@@ -77,7 +119,8 @@ void main() {
     expect(session.authorizationFor(Uri.parse(url)), 'Bearer $key');
     expect(() => session.authorizationFor(Uri.parse('http://100.64.0.2:21000/')), throwsA(isA<LocalMacUnauthorized>()));
     await session.signOut();
-    expect(await const FlutterSecureStorage().read(key: LocalMacSession.serversKey), isNull);
+    expect(await session.readServers(), isEmpty);
+    expect(await const FlutterSecureStorage().read(key: LocalMacSession.serversKey), isNot(contains(replacement)));
   });
 
   test('corrupt saved servers are reported without overwriting credentials', () async {
@@ -147,11 +190,13 @@ void main() {
   });
 
   test('Tailscale pairing, restart and credentials retain exactly the selected HTTP/WS authority', () async {
-    final session = LocalMacSession(probe: (base, submitted) async {
-      expect(base.toString(), 'http://100.64.0.1:21000/');
-      expect(submitted, key);
-      return {'uid': 'alice'};
-    });
+    final session = LocalMacSession(
+      probe: (base, submitted) async {
+        expect(base.toString(), 'http://100.64.0.1:21000/');
+        expect(submitted, key);
+        return {'uid': 'alice'};
+      },
+    );
     await session.connect('100.64.0.1:21000', key);
     final restored = LocalMacSession();
     await restored.restore();
@@ -178,10 +223,12 @@ void main() {
 
   test('Tailscale rejected key never replaces a working HTTPS pairing', () async {
     var reject = false;
-    final session = LocalMacSession(probe: (_, __) async {
-      if (reject) throw LocalMacUnauthorized();
-      return {'uid': 'alice'};
-    });
+    final session = LocalMacSession(
+      probe: (_, __) async {
+        if (reject) throw LocalMacUnauthorized();
+        return {'uid': 'alice'};
+      },
+    );
     await session.connect(url, key);
     reject = true;
     await expectLater(session.connect('100.64.0.1', key), throwsA(isA<LocalMacUnauthorized>()));
@@ -191,13 +238,14 @@ void main() {
 
   test('pairing admits audio while reporting separate live and final readiness', () async {
     final session = LocalMacSession(
-        probe: (_, __) async => {
-              'uid': 'alice',
-              'local_transcription': {
-                'live': {'status': 'busy'},
-                'final': {'status': 'ready'}
-              },
-            });
+      probe: (_, __) async => {
+        'uid': 'alice',
+        'local_transcription': {
+          'live': {'status': 'busy'},
+          'final': {'status': 'ready'},
+        },
+      },
+    );
     await session.connect(url, key);
     expect(session.isSignedIn, isTrue);
     expect(session.readiness.live, 'busy');
@@ -207,10 +255,11 @@ void main() {
     await restored.restore();
     expect(restored.readiness.finalTranscript, 'unknown');
     expect(
-        LocalTranscriptionReadiness.fromProfile({
-          'local_transcription': {'live': 1}
-        }).live,
-        'unknown');
+      LocalTranscriptionReadiness.fromProfile({
+        'local_transcription': {'live': 1},
+      }).live,
+      'unknown',
+    );
   });
 
   test('saved settings survive restart without authenticating or switching the active server', () async {
@@ -219,8 +268,12 @@ void main() {
     await session.saveSettings(' https://another.ngrok.app ', ' unfinished-key ');
     final restored = LocalMacSession();
     await restored.restore();
-    expect(await restored.readSettings(),
-        (address: 'https://another.ngrok.app', key: 'unfinished-key', name: '', serverId: null));
+    expect(await restored.readSettings(), (
+      address: 'https://another.ngrok.app',
+      key: 'unfinished-key',
+      name: '',
+      serverId: null,
+    ));
     expect(restored.address, url);
     expect(restored.authorizationFor(Uri.parse(url)), 'Bearer $key');
     expect(restored.permits(Uri.parse('https://another.ngrok.app')), isFalse);
@@ -239,7 +292,18 @@ void main() {
   test('explicit native launch handoff persists settings without changing authenticated origin', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     const channel = MethodChannel('com.omi/environment');
-    Map<String, String>? handoff = {'url': url, 'key': key};
+    Map<String, String>? handoff = {
+      'server_presets_b64': base64Encode(
+        utf8.encode(
+          jsonEncode({
+            'version': 1,
+            'servers': [
+              {'id': 'local', 'name': 'Local Mac', 'url': url, 'key': key},
+            ],
+          }),
+        ),
+      ),
+    };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       expect(call.method, 'takeLocalMacSettings');
       final value = handoff;
@@ -252,7 +316,7 @@ void main() {
     });
     final session = LocalMacSession();
     await session.importLaunchSettings();
-    expect(await LocalMacSession().readSettings(), (address: url, key: key, name: '', serverId: null));
+    expect(await LocalMacSession().readSettings(), (address: url, key: key, name: 'Local Mac', serverId: 'local'));
     expect(session.isSignedIn, isFalse);
     await session.saveSettings('https://changed.ngrok.app', key);
     await session.importLaunchSettings();
@@ -260,10 +324,12 @@ void main() {
   });
 
   test('whitespace from pasted app keys is normalized before verification and storage', () async {
-    final session = LocalMacSession(probe: (_, submitted) async {
-      expect(submitted, key);
-      return {'uid': 'alice'};
-    });
+    final session = LocalMacSession(
+      probe: (_, submitted) async {
+        expect(submitted, key);
+        return {'uid': 'alice'};
+      },
+    );
     final pasted = ' ${key.substring(0, 20)}\n${key.substring(20)} ';
     await session.saveSettings(url, pasted);
     await session.connect(url, pasted);
@@ -278,7 +344,7 @@ void main() {
       'https://synthetic.ngrok.app.evil.test/',
       'http://synthetic.ngrok.app/',
       'https://synthetic.ngrok.app:8000/',
-      'https://key@synthetic.ngrok.app/'
+      'https://key@synthetic.ngrok.app/',
     ]) {
       expect(() => session.authorizationFor(Uri.parse(other)), throwsA(isA<LocalMacUnauthorized>()));
     }
@@ -287,10 +353,12 @@ void main() {
 
   test('network failure keeps previous pairing; rejected key stays rejected after restart', () async {
     var available = true;
-    final session = LocalMacSession(probe: (_, __) async {
-      if (!available) throw const SocketException('unavailable');
-      return {'uid': 'alice'};
-    });
+    final session = LocalMacSession(
+      probe: (_, __) async {
+        if (!available) throw const SocketException('unavailable');
+        return {'uid': 'alice'};
+      },
+    );
     await session.connect(url, key);
     available = false;
     await expectLater(session.connect('https://another.ngrok.app/', key), throwsA(isA<SocketException>()));

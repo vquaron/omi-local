@@ -22,6 +22,7 @@ import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth/local_emulator_credentials.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/offline_onboarding.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
@@ -292,6 +293,9 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    // Settings clears preferences first. Keep offline re-entry independent of
+    // cloud onboarding without bypassing runtime permission checks.
+    applyOfflineOnboardingDefaults();
     if (Env.usesLocalTunnel) {
       await LocalMacSession.instance.signOut();
       _clearCachedIdentityAndAuth();

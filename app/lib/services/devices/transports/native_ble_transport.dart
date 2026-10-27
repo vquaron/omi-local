@@ -32,17 +32,29 @@ class NativeBleTransport extends DeviceTransport {
   Completer<List<BleService>>? _deviceReadyCompleter;
 
   DeviceTransportState _state = DeviceTransportState.disconnected;
+  BluetoothAdapterState? _adapterState;
+  void Function()? _removeAdapterListener;
   Timer? _audioLivenessTimer;
   int _audioSilenceResubscribes = 0;
 
   NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
-      : _hostApi = hostApi ?? BleHostApi() {
+    : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
       onConnectionState: _handleConnectionState,
       onDeviceReady: _handleDeviceReady,
       onCharacteristicValue: _handleCharacteristicValue,
     );
+    _observeAdapter();
+  }
+
+  void _observeAdapter() {
+    _removeAdapterListener ??= BleBridge.instance.addBluetoothStateListener((value) {
+      _adapterState = BluetoothReadiness.parse(value);
+      if (_adapterState != BluetoothAdapterState.on) {
+        _handleConnectionState(false, 'bluetooth_adapter_unavailable');
+      }
+    });
   }
 
   @override
@@ -55,11 +67,13 @@ class NativeBleTransport extends DeviceTransport {
 
   @override
   Future<void> connect() async {
+    _observeAdapter();
     if (_state == DeviceTransportState.connected) return;
 
     if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.connection)) {
       throw BluetoothAdapterUnavailableException(BluetoothReadiness.instance.state);
     }
+    _adapterState = BluetoothAdapterState.on;
 
     _updateState(DeviceTransportState.connecting);
 
@@ -91,6 +105,8 @@ class NativeBleTransport extends DeviceTransport {
 
   @override
   Future<void> disconnect() async {
+    _removeAdapterListener?.call();
+    _removeAdapterListener = null;
     if (_state == DeviceTransportState.disconnected && _streamControllers.isEmpty) return;
 
     // A liveness watch pending from a prior connection must not fire into a
@@ -222,6 +238,8 @@ class NativeBleTransport extends DeviceTransport {
 
   @override
   Future<void> dispose() async {
+    _removeAdapterListener?.call();
+    _removeAdapterListener = null;
     _audioLivenessTimer?.cancel();
     BleBridge.instance.unregisterPeripheral(_peripheralUuid);
     _activeSubscriptionKeys.clear();
@@ -285,6 +303,8 @@ class NativeBleTransport extends DeviceTransport {
   }
 
   void _handleDeviceReady(List<BleService> services) {
+    // A queued discovery callback cannot resurrect a link while its radio is off.
+    if (_adapterState != null && _adapterState != BluetoothAdapterState.on) return;
     if (_deviceReadyCompleter != null && !_deviceReadyCompleter!.isCompleted) {
       // Initial connection
       _services = services;

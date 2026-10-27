@@ -8,11 +8,30 @@ command="${1:-help}"
 fail() { echo "$*" >&2; exit 1; }
 usage() { echo 'Run ./omiloc --help. Docker settings are saved by bootstrap in .env.docker.'; }
 case "$command" in help|-h|--help) usage; exit 0 ;; esac
+# Provider JSON uses the running volume's registry, without startup probes or
+# banners on stdout. Forward key variable names, never their values in argv.
+if [[ "$command" == providers ]]; then
+  provider_command=(docker compose --env-file /dev/null -f compose.yaml exec -T)
+  provider_args=("$@")
+  for ((i=0; i<${#provider_args[@]}; i++)); do
+    if [[ "${provider_args[i]}" == --api-key-env ]]; then
+      key_name="${provider_args[i+1]:-}"
+      [[ "$key_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || fail 'Invalid key environment variable name.'
+      provider_command+=(-e "$key_name")
+    elif [[ "${provider_args[i]}" == --api-key-env=* ]]; then
+      key_name="${provider_args[i]#*=}"
+      [[ "$key_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || fail 'Invalid key environment variable name.'
+      provider_command+=(-e "$key_name")
+    fi
+  done
+  exec "${provider_command[@]}" app python -m dev_harness.local_provider_cli "$@"
+fi
 case "$command" in bootstrap|up|dev|down|status|logs|doctor|open|pair|config|configure|tunnel) ;;
   *) usage >&2; exit 2 ;;
 esac
 # Read a deliberately small, non-executable format. Never source an env file.
 OMI_DOCKER_DEVICE=${OMI_DOCKER_DEVICE:-cpu}
+OMI_DOCKER_STT=${OMI_DOCKER_STT:-builtin}
 OMI_DOCKER_GPU_ID=${OMI_DOCKER_GPU_ID:-0}
 OMI_DOCKER_TRANSPORT=${OMI_DOCKER_TRANSPORT:-local}
 STT_MODEL=${STT_MODEL:-Systran/faster-whisper-small}
@@ -22,12 +41,18 @@ config_file=.env.docker
 [[ ! -L "$config_file" ]] || fail '.env.docker must not be a symlink.'
 if [[ -e "$config_file" ]]; then
   [[ -f "$config_file" && $(wc -c < "$config_file") -le 4096 ]] || fail 'Invalid .env.docker file.'
+  if [[ "$(uname -s)" == Darwin ]]; then
+    config_mode=$(stat -f '%Lp' "$config_file")
+  else
+    config_mode=$(stat -c '%a' "$config_file")
+  fi
+  [[ "$config_mode" == 600 ]] || fail '.env.docker must be private. Run: chmod 600 .env.docker'
   seen=' '
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -n "$line" && "$line" != \#* ]] || continue
     [[ "$line" == *=* ]] || fail 'Use NAME=value lines in .env.docker.'
     name=${line%%=*}; value=${line#*=}
-    case "$name" in OMI_DOCKER_DEVICE|OMI_DOCKER_GPU_ID|OMI_DOCKER_TRANSPORT|STT_MODEL|STT_REVISION|STT_THREADS) ;;
+    case "$name" in OMI_DOCKER_DEVICE|OMI_DOCKER_STT|OMI_DOCKER_GPU_ID|OMI_DOCKER_TRANSPORT|STT_MODEL|STT_REVISION|STT_THREADS) ;;
       *) fail 'Unknown field in .env.docker. See docs/DOCKER.md.' ;;
     esac
     [[ "$seen" != *" $name "* ]] || fail 'Duplicate field in .env.docker.'
@@ -43,10 +68,11 @@ while [[ $# -gt 0 ]]; do
   case "$command:$option" in
     logs:-f) follow=true ;;
     doctor:--inference) inference=true ;;
-    bootstrap:--device|bootstrap:--gpu|bootstrap:--transport|bootstrap:--model|bootstrap:--revision|bootstrap:--threads)
+    bootstrap:--device|bootstrap:--stt|bootstrap:--gpu|bootstrap:--transport|bootstrap:--model|bootstrap:--revision|bootstrap:--threads)
       [[ $# -gt 0 && -n "$1" ]] || fail "Missing value for $option."
       case "$option" in
         --device) OMI_DOCKER_DEVICE=$1 ;;
+        --stt) OMI_DOCKER_STT=$1 ;;
         --gpu) OMI_DOCKER_GPU_ID=$1 ;;
         --transport) OMI_DOCKER_TRANSPORT=$1 ;;
         --model) STT_MODEL=$1 ;;
@@ -58,14 +84,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 case "$OMI_DOCKER_DEVICE" in cpu|cuda) ;; *) fail 'Device must be cpu or cuda; choose it with bootstrap --device.' ;; esac
+case "$OMI_DOCKER_STT" in builtin|external) ;; *) fail 'STT must be builtin or external; choose it with bootstrap --stt.' ;; esac
 case "$OMI_DOCKER_TRANSPORT" in local|ngrok|tailscale) ;; *) fail 'Transport must be local, tailscale or ngrok.' ;; esac
 [[ "$OMI_DOCKER_GPU_ID" =~ ^([0-9]+|GPU-[a-fA-F0-9-]+)$ ]] || fail 'GPU must be an index or NVIDIA GPU UUID.'
 [[ "$STT_MODEL" =~ ^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$ ]] || fail 'Model must be a Hugging Face owner/model ID.'
 [[ "$STT_REVISION" =~ ^[a-zA-Z0-9_./-]+$ ]] || fail 'Invalid model revision.'
 [[ "$STT_THREADS" =~ ^[1-9][0-9]*$ ]] || fail 'Threads must be a positive integer.'
-export OMI_DOCKER_DEVICE OMI_DOCKER_GPU_ID OMI_DOCKER_TRANSPORT STT_MODEL STT_REVISION STT_THREADS
+export OMI_DOCKER_DEVICE OMI_DOCKER_STT OMI_DOCKER_GPU_ID OMI_DOCKER_TRANSPORT STT_MODEL STT_REVISION STT_THREADS
 transport=$OMI_DOCKER_TRANSPORT
 files=(-f compose.yaml)
+[[ "$OMI_DOCKER_STT" != external ]] || files+=(-f compose.external.yaml)
 # These files never import the native .env. The validated values above win.
 compose() { docker compose --env-file /dev/null "${files[@]}" "$@"; }
 tailscale_address() {
@@ -151,7 +179,7 @@ case "$command" in bootstrap|up|dev|doctor|pair|config)
     files+=(-f compose.tailscale.yaml)
   fi ;;
 esac
-[[ "$OMI_DOCKER_DEVICE" != cuda ]] || files+=(-f compose.gpu.yaml)
+if [[ "$OMI_DOCKER_STT" == builtin && "$OMI_DOCKER_DEVICE" == cuda ]]; then files+=(-f compose.gpu.yaml); fi
 case "$command" in dev) files+=(-f compose.dev.yaml) ;; esac
 # CPU/GPU and transport choices stay fixed until an explicit bootstrap.
 case "$command" in
@@ -167,19 +195,23 @@ case "$command" in
     docker info >/dev/null || fail 'Docker daemon is unavailable.'
     compose config --quiet
     echo "Preparing Docker runtime ($OMI_DOCKER_DEVICE)."
-    compose build app stt download
-    if [[ "$OMI_DOCKER_DEVICE" == cuda ]]; then
-      # Exercise this image's CUDA driver path on the selected device, not just nvidia-smi on the host.
-      compose run --rm --no-deps -T stt python3 -c 'import ctranslate2; assert ctranslate2.get_cuda_device_count() == 1, "Selected CUDA device is unavailable"'
+    if [[ "$OMI_DOCKER_STT" == external ]]; then
+      compose build app
+    else
+      compose build app stt download
+      if [[ "$OMI_DOCKER_DEVICE" == cuda ]]; then
+        # Exercise this image's CUDA driver path on the selected device, not just nvidia-smi on the host.
+        compose run --rm --no-deps -T stt python3 -c 'import ctranslate2; assert ctranslate2.get_cuda_device_count() == 1, "Selected CUDA device is unavailable"'
+      fi
+      downloaded=$(compose run --rm --no-deps -T download)
+      revision=$(printf '%s\n' "$downloaded" | sed -n 's/^Model revision: //p')
+      [[ "$revision" =~ ^[a-f0-9]{40,64}$ ]] || fail 'Model download did not return an immutable revision; bootstrap is incomplete.'
+      STT_REVISION=$revision
     fi
-    downloaded=$(compose run --rm --no-deps -T download)
-    revision=$(printf '%s\n' "$downloaded" | sed -n 's/^Model revision: //p')
-    [[ "$revision" =~ ^[a-f0-9]{40,64}$ ]] || fail 'Model download did not return an immutable revision; bootstrap is incomplete.'
-    STT_REVISION=$revision
     pending=$(mktemp .env.docker.XXXXXX)
     {
       echo '# Docker host settings. Literal values only; no native credentials.'
-      for name in OMI_DOCKER_DEVICE OMI_DOCKER_GPU_ID OMI_DOCKER_TRANSPORT STT_MODEL STT_REVISION STT_THREADS; do
+      for name in OMI_DOCKER_DEVICE OMI_DOCKER_STT OMI_DOCKER_GPU_ID OMI_DOCKER_TRANSPORT STT_MODEL STT_REVISION STT_THREADS; do
         printf '%s=%s\n' "$name" "${!name}"
       done
     } > "$pending"
@@ -204,12 +236,17 @@ case "$command" in
     docker info >/dev/null
     compose config --quiet
     echo 'Docker prerequisites and configuration passed.'
+    compose --profile tunnel ps --all
+    if ! compose exec -T app python docker/runtime.py health; then
+      fail 'Docker runtime readiness failed. Inspect logs; run up if the stack is stopped.'
+    fi
+    echo 'Docker runtime readiness passed. Phone authentication and audio delivery require separate checks.'
     if "$inference"; then
-      compose exec -T app python docker/runtime.py health
-      compose exec -T app python docker/runtime.py inference "$OMI_DOCKER_DEVICE"
+      probe_device=$OMI_DOCKER_DEVICE
+      [[ "$OMI_DOCKER_STT" != external ]] || probe_device=external
+      compose exec -T app python docker/runtime.py inference "$probe_device"
     else
-      compose --profile tunnel ps --all
-      echo 'Run doctor --inference after up to verify synthetic transcription.'
+      echo 'Inference was not tested. Run doctor --inference to transcribe synthetic speech.'
     fi ;;
   pair)
     [[ -t 0 && -t 1 ]] || fail 'Run pair in your own interactive terminal; keys must not enter logs.'

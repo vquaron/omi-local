@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/local_recording_timer.dart';
 
 /// Local WAV controls until the live transcript screen provides a Stop action.
 class TemporaryRecordingControls extends StatefulWidget {
@@ -38,7 +39,7 @@ class _TemporaryRecordingControlsState extends State<TemporaryRecordingControls>
         provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause;
     final phoneActive =
         provider.recordingState == RecordingState.record || provider.recordingState == RecordingState.interrupted;
-    final active = deviceActive || phoneActive;
+    final active = deviceActive || phoneActive || provider.localRecordingDuration != null;
     final paused = deviceActive && provider.isPaused;
     final available = !_busy && provider.recordingState != RecordingState.initialising;
     return Row(
@@ -52,23 +53,27 @@ class _TemporaryRecordingControlsState extends State<TemporaryRecordingControls>
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        LocalRecordingTimer(provider: provider),
         IconButton(
           key: const Key('temporary_start_recording'),
           tooltip: context.l10n.startRecording,
           color: Colors.white,
           disabledColor: Colors.grey.shade700,
           icon: const Icon(Icons.play_arrow_rounded),
-          onPressed: available && provider.havingRecordingDevice && !active
+          onPressed: available && (provider.havingRecordingDevice || provider.isPhoneMicSelected) && !active
               ? () => _run(() async {
-                    try {
-                      await provider.streamDeviceRecording(userInitiated: true);
-                      if (provider.recordingState != RecordingState.deviceRecord)
-                        throw StateError('Capture unavailable');
-                    } catch (_) {
-                      await provider.stopStreamDeviceRecording();
-                      rethrow;
-                    }
-                  })
+                  if (provider.isPhoneMicSelected) {
+                    await provider.streamRecording();
+                    return;
+                  }
+                  try {
+                    await provider.streamDeviceRecording(userInitiated: true);
+                    if (provider.recordingState != RecordingState.deviceRecord) throw StateError('Capture unavailable');
+                  } catch (_) {
+                    await provider.stopStreamDeviceRecording();
+                    rethrow;
+                  }
+                })
               : null,
         ),
         IconButton(
@@ -77,15 +82,7 @@ class _TemporaryRecordingControlsState extends State<TemporaryRecordingControls>
           color: const Color(0xFFFE5D50),
           disabledColor: Colors.grey.shade700,
           icon: const Icon(Icons.stop_rounded),
-          onPressed: available && active
-              ? () => _run(() async {
-                    if (phoneActive) {
-                      await provider.stopStreamRecording();
-                    } else {
-                      await provider.stopStreamDeviceRecording();
-                    }
-                  })
-              : null,
+          onPressed: !_busy && active ? () => _run(provider.stopLocalCapture) : null,
         ),
         IconButton(
           key: const Key('temporary_recording_mute'),

@@ -16,4 +16,17 @@ class EnvironmentDetector {
       return false;
     }
   }
+
+  /// Dart's `Platform.environment` is empty inside an iOS app, so the simulator
+  /// check has to come from the native side.
+  static Future<bool> isIosSimulator() async {
+    if (!Platform.isIOS) return false;
+    try {
+      final bool result = await _channel.invokeMethod('isSimulator');
+      return result;
+    } catch (e) {
+      debugPrint('EnvironmentDetector: Failed to check simulator: $e');
+      return false;
+    }
+  }
 }

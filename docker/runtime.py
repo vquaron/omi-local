@@ -12,6 +12,7 @@ import threading
 import urllib.request
 
 from dev_harness import cli, config, local_env, local_library, local_mac, local_stt_services, local_stt_watch
+from dev_harness.local_transport import normalize_https_url
 
 ROOT = Path('/opt/omiloc')
 DATA = Path('/data')
@@ -74,7 +75,7 @@ def configure():
         raise ValueError('Run configure in your own interactive terminal')
     values = local_env.read_env(DATA / 'connection.env')
     values['OMI_LOCAL_TRANSPORT'] = 'ngrok'
-    values['OMI_NGROK_URL'] = local_mac.endpoint(input('Ngrok HTTPS domain: ').strip())
+    values['OMI_NGROK_URL'] = normalize_https_url(input('Ngrok HTTPS domain: ').strip())
     values['NGROK_AUTHTOKEN'] = getpass.getpass('Ngrok token (hidden): ').strip()
     staged = DATA / 'connection.next.env'
     fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

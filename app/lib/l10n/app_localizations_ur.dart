@@ -9956,4 +9956,74 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get localMacServers => 'محفوظ کردہ سرورز';
+
+  @override
+  String get liveTranslation => 'براہ راست ترجمہ';
+
+  @override
+  String get liveTranslationTargetLanguage => 'اس زبان میں ترجمہ کریں';
+
+  @override
+  String get liveTranslationHelp =>
+      'منسلک سرور اصل متن کے نیچے ترجمہ دکھاتا ہے۔ خلاصے کا ماڈل خود بخود استعمال ہوتا ہے، جب تک آپ سرور کی لائبریری میں دوسرا ماڈل نہ چنیں: Settings → Translation۔';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'منسلک سرور پر ترجمے کا ماڈل ترتیب نہیں دیا گیا۔ اس کی لائبریری کھولیں: Settings → Summarization یا Translation → Save → Use۔';
+
+  @override
+  String get liveTranslationFailed => 'منسلک سرور پر ترجمہ دستیاب نہیں۔ اس کی لائبریری دیکھیں: Settings → Translation۔';
+
+  @override
+  String get diarization => 'مقررین کی شناخت';
+
+  @override
+  String get providerUnavailable => 'سرور دستیاب نہیں';
+
+  @override
+  String get providerMisconfigured => 'فراہم کنندہ کی ترتیبات چیک کریں';
+
+  @override
+  String speakersCount(int count) {
+    return '$count مقررین';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'مقررین کی شناخت نہیں ہوئی';
+
+  @override
+  String get diarizationFailed => 'مقررین کی شناخت ناکام';
+
+  @override
+  String get localProcessingHelp =>
+      'لائیو بولنے والوں کے لیبل Live فراہم کنندہ سے آتے ہیں۔ نیچے بولنے والوں کی علیحدگی مکمل ریکارڈنگز پر کارروائی کرتی ہے۔';
+
+  @override
+  String get localProcessingApplyHelp => 'تبدیل کرنے سے پہلے ریکارڈنگ روکیں۔ منتخب سرورز آپ کی آڈیو وصول کرتے ہیں۔';
+
+  @override
+  String get localProcessingKeyHelp => 'خالی چھوڑنے سے محفوظ کلید برقرار رہتی ہے۔ دوسرے سرور کو اپنی کلید درکار ہے۔';
+
+  @override
+  String get localProcessingUnsupported => 'ان ترتیبات میں ترمیم کرنے کے لیے منسلک سرور اپ ڈیٹ کریں۔';
+
+  @override
+  String get localProcessingFinished => 'مکمل ریکارڈنگز';
+
+  @override
+  String get localProcessingProbe => 'کنکشن جانچیں';
+
+  @override
+  String get localProcessingPending =>
+      'محفوظ کردہ تبدیلیاں ابھی فعال نہیں ہیں۔ لاگو کرنے کے لیے تصدیق کریں پر ٹیپ کریں۔';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'آڈیو سنک کرنے کے لیے سرور اپ ڈیٹ کریں۔ فون پر محفوظ آڈیو برقرار رہتی ہے۔';
+
+  @override
+  String get liveTranslationBidirectional => 'دو طرفہ ترجمہ';
+
+  @override
+  String get liveTranslationPairHelp => 'ہر جملے کی زبان پہچانیں اور اسے دوسری منتخب زبان میں ترجمہ کریں۔';
 }

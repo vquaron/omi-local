@@ -9978,4 +9978,76 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get localMacServers => 'Saglabātie serveri';
+
+  @override
+  String get liveTranslation => 'Tulkošana reāllaikā';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Tulkot uz';
+
+  @override
+  String get liveTranslationHelp =>
+      'Pievienotais serveris rāda tulkojumu zem oriģināla. Automātiski tiek izmantots kopsavilkumu modelis, ja servera bibliotēkā neizvēlaties citu: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Pievienotajā serverī nav iestatīts tulkošanas modelis. Atveriet tā bibliotēku: Settings → Summarization vai Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Pievienotajā serverī tulkošana nav pieejama. Pārbaudiet tā bibliotēku: Settings → Translation.';
+
+  @override
+  String get diarization => 'Runātāju atdalīšana';
+
+  @override
+  String get providerUnavailable => 'Serveris nav pieejams';
+
+  @override
+  String get providerMisconfigured => 'Pārbaudiet pakalpojumu sniedzēja iestatījumus';
+
+  @override
+  String speakersCount(int count) {
+    return '$count runātāji';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Runātāju atdalīšana nav veikta';
+
+  @override
+  String get diarizationFailed => 'Runātāju atdalīšana neizdevās';
+
+  @override
+  String get localProcessingHelp =>
+      'Runātāju etiķetes tiešraidē nodrošina Live pakalpojumu sniedzējs. Zemāk esošā runātāju nošķiršana apstrādā pabeigtus ierakstus.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'Pirms pārslēgšanas apturiet ierakstīšanu. Atlasītie serveri saņem jūsu audio.';
+
+  @override
+  String get localProcessingKeyHelp => 'Tukšs lauks saglabā esošo atslēgu. Citam serverim vajadzīga sava atslēga.';
+
+  @override
+  String get localProcessingUnsupported => 'Lai mainītu šos iestatījumus, atjauniniet pārī savienoto serveri.';
+
+  @override
+  String get localProcessingFinished => 'Pabeigtie ieraksti';
+
+  @override
+  String get localProcessingProbe => 'Pārbaudīt savienojumu';
+
+  @override
+  String get localProcessingPending =>
+      'Saglabātās izmaiņas vēl nav aktīvas. Pieskarieties Apstiprināt, lai tās lietotu.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Lai sinhronizētu audio, atjauniniet serveri. Tālrunī saglabātais audio tiek paturēts.';
+
+  @override
+  String get liveTranslationBidirectional => 'Divvirzienu tulkošana';
+
+  @override
+  String get liveTranslationPairHelp => 'Noteikt katras frāzes valodu un tulkot otrā izvēlētajā valodā.';
 }

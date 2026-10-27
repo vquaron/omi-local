@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import urllib.request
 
-from . import local_stt, local_openai_stt
+from . import config, local_stt, local_openai_stt
 
 
 def require_segments(raw, duration):
@@ -40,6 +40,11 @@ def native_inference(cfg):
 
 
 def docker_inference(root, expected_device):
+    if expected_device == 'external':
+        # External mode has no built-in STT listener. Use the same selected
+        # provider, credential snapshot and worker lock as the native probe.
+        native_inference(config.load_config(root, create_layout=False))
+        return
     # The model loads before /health becomes available; inference still needs a real request.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open('http://127.0.0.1:10301/health', timeout=5) as response:

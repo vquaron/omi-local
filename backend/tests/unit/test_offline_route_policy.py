@@ -17,6 +17,16 @@ def test_offline_detail_contract_does_not_open_other_conversation_actions():
     assert not is_offline_http_route_allowed('GET', '/v1/conversations/count')
 
 
+def test_processing_routes_are_exact_not_a_general_admin_proxy():
+    assert is_offline_http_route_allowed('GET', '/v1/local/processing')
+    for operation in ('save', 'probe', 'models', 'activate'):
+        assert is_offline_http_route_allowed('POST', '/v1/local/processing/' + operation)
+    assert is_offline_http_route_allowed('DELETE', '/v1/local/processing/profiles/synthetic-profile')
+    for method, path in [('POST', '/v1/local/processing/delete'), ('GET', '/v1/local/processing/save'),
+                         ('DELETE', '/v1/local/processing/profiles/../settings'), ('GET', '/api/settings')]:
+        assert not is_offline_http_route_allowed(method, path)
+
+
 def _client(monkeypatch) -> TestClient:
     monkeypatch.setenv("OMI_ENV_STAGE", "offline")
     app = FastAPI()

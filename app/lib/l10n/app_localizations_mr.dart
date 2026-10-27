@@ -9953,4 +9953,75 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get localMacServers => 'जतन केलेले सर्व्हर';
+
+  @override
+  String get liveTranslation => 'थेट भाषांतर';
+
+  @override
+  String get liveTranslationTargetLanguage => 'या भाषेत भाषांतर करा';
+
+  @override
+  String get liveTranslationHelp =>
+      'जोडलेला सर्व्हर मूळ मजकुराखाली भाषांतर दाखवतो. सर्व्हरच्या लायब्ररीत दुसरे मॉडेल निवडले नसल्यास सारांश मॉडेल आपोआप वापरले जाते: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'जोडलेल्या सर्व्हरवर भाषांतराचे मॉडेल सेट केलेले नाही. त्याची लायब्ररी उघडा: Settings → Summarization किंवा Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'जोडलेल्या सर्व्हरवर भाषांतर उपलब्ध नाही. त्याची लायब्ररी तपासा: Settings → Translation.';
+
+  @override
+  String get diarization => 'वक्ता ओळख';
+
+  @override
+  String get providerUnavailable => 'सर्व्हर उपलब्ध नाही';
+
+  @override
+  String get providerMisconfigured => 'प्रदात्याची सेटिंग्ज तपासा';
+
+  @override
+  String speakersCount(int count) {
+    return '$count वक्ते';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'वक्ता ओळख केली नाही';
+
+  @override
+  String get diarizationFailed => 'वक्ता ओळख अयशस्वी';
+
+  @override
+  String get localProcessingHelp =>
+      'थेट वक्त्यांची लेबले Live प्रदात्याकडून येतात. खालील वक्ता विभाजन पूर्ण झालेल्या रेकॉर्डिंगवर प्रक्रिया करते.';
+
+  @override
+  String get localProcessingApplyHelp => 'बदलण्यापूर्वी रेकॉर्डिंग थांबवा. निवडलेल्या सर्व्हरना तुमचा ऑडिओ मिळतो.';
+
+  @override
+  String get localProcessingKeyHelp =>
+      'रिकामे ठेवल्यास जतन केलेली कळ कायम राहते. दुसऱ्या सर्व्हरसाठी त्याची स्वतःची कळ आवश्यक आहे.';
+
+  @override
+  String get localProcessingUnsupported => 'ही सेटिंग्ज बदलण्यासाठी जोडलेला सर्व्हर अपडेट करा.';
+
+  @override
+  String get localProcessingFinished => 'पूर्ण झालेली रेकॉर्डिंग';
+
+  @override
+  String get localProcessingProbe => 'कनेक्शन तपासा';
+
+  @override
+  String get localProcessingPending => 'जतन केलेले बदल सक्रिय नाहीत. लागू करण्यासाठी पुष्टी करा वर टॅप करा.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'ऑडिओ सिंक करण्यासाठी सर्व्हर अपडेट करा. फोनवर जतन केलेला ऑडिओ सुरक्षित राहतो.';
+
+  @override
+  String get liveTranslationBidirectional => 'दुतर्फी भाषांतर';
+
+  @override
+  String get liveTranslationPairHelp => 'प्रत्येक वाक्याची भाषा ओळखा आणि निवडलेल्या दुसऱ्या भाषेत भाषांतर करा.';
 }

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 import html
 import json
 import math
@@ -31,6 +33,85 @@ ASSETS = {'/': ('index.html', 'text/html; charset=utf-8'),
           '/recording-processing.mjs': ('recording-processing.mjs', 'text/javascript; charset=utf-8'),
           '/player.mjs': ('player.mjs', 'text/javascript; charset=utf-8'),
           '/reload.mjs': ('reload.mjs', 'text/javascript; charset=utf-8')}
+
+
+PASSWORD_ITERATIONS = 600_000
+
+
+def hash_password(password, *, iterations=PASSWORD_ITERATIONS):
+    """Colon-separated so the value survives Compose .env interpolation ("$" would not)."""
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), iterations)
+    return f'pbkdf2-sha256:{iterations}:{salt}:{digest.hex()}'
+
+
+def verify_password(stored, password):
+    try:
+        scheme, iterations, salt, digest = stored.split(':')
+        if scheme != 'pbkdf2-sha256' or not 1 <= int(iterations) <= 10_000_000:
+            return False
+        computed = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), int(iterations))
+        return hmac.compare_digest(computed, bytes.fromhex(digest))
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+class Access:
+    """Optional remote access to the library through one explicit HTTPS origin.
+
+    Loopback stays the default and is never widened. A remote request is served
+    only when its Host/Origin equal the configured origin (Tailscale Serve, which
+    strips client-sent Tailscale-User-* headers) and it carries either an allowed
+    tailnet login or valid Basic credentials over that TLS origin.
+    """
+
+    def __init__(self, *, origin='', logins='', user='', password_hash=''):
+        self.origin = ''
+        self.host = ''
+        self.logins = {v.strip().lower() for v in (logins or '').split(',') if v.strip()}
+        self.user = user or ''
+        self.password_hash = password_hash or ''
+        parsed = urlsplit(origin or '')
+        if origin:
+            if (parsed.scheme != 'https' or not parsed.hostname or '.' not in parsed.hostname or parsed.path not in {'', '/'}
+                    or parsed.query or parsed.fragment or parsed.username or parsed.password):
+                raise ValueError('OMI_LIBRARY_PUBLIC_ORIGIN must be an https://host[:port] origin')
+            self.origin = f'https://{parsed.netloc}'
+            self.host = parsed.netloc
+        if self.origin and not (self.logins or (self.user and self.password_hash)):
+            raise ValueError('Remote library access needs OMI_LIBRARY_TAILSCALE_LOGIN or a user and password hash')
+        if bool(self.user) != bool(self.password_hash):
+            raise ValueError('Set OMI_LIBRARY_USER together with OMI_LIBRARY_PASSWORD_HASH')
+
+    @classmethod
+    def from_env(cls, environ=None):
+        env = os.environ if environ is None else environ
+        return cls(origin=env.get('OMI_LIBRARY_PUBLIC_ORIGIN', ''), logins=env.get('OMI_LIBRARY_TAILSCALE_LOGIN', ''),
+                   user=env.get('OMI_LIBRARY_USER', ''), password_hash=env.get('OMI_LIBRARY_PASSWORD_HASH', ''))
+
+    @property
+    def enabled(self):
+        return bool(self.origin)
+
+    @property
+    def prompts(self):
+        return bool(self.user)
+
+    def identified(self, headers):
+        login = (headers.get('Tailscale-User-Login') or '').strip().lower()
+        if login and login in self.logins:
+            return True
+        value = headers.get('Authorization', '')
+        if self.user and value.startswith('Basic '):
+            try:
+                user, _, password = base64.b64decode(value[6:].strip(), validate=True).decode().partition(':')
+            except (ValueError, UnicodeDecodeError):
+                return False
+            ok = hmac.compare_digest(user.encode(), self.user.encode()) & verify_password(self.password_hash, password)
+            if not ok:
+                time.sleep(0.2)  # Blunt online-guessing brake; the origin is tailnet-only anyway.
+            return bool(ok)
+        return False
 
 
 def asset_versions(assets, *, index_content=None):
@@ -223,10 +304,39 @@ def byte_range(value, size):
     return start, end
 
 
-def handler(library, assets, delete=None, runtime=None, settings=None):
+def handler(library, assets, delete=None, runtime=None, settings=None, access=None):
+    access = access or Access()
+    from .local_provider_api import Processing
+    processing = Processing(settings.cfg) if settings is not None else None
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
             pass  # URLs, transcript text and filesystem identifiers never enter logs.
+
+        def allowed(self, *, request=None, origin_required=True, api=True):
+            """Same-origin check for loopback or the one configured remote origin."""
+            loopback = f'127.0.0.1:{self.server.server_port}'
+            host, origin = self.headers.get('Host'), self.headers.get('Origin')
+            if (any(k.lower() == 'forwarded' or k.lower().startswith('x-forwarded-') for k in self.headers)
+                    or (request is not None and self.headers.get('X-Omiloc-Request') != request)
+                    or (api and self.headers.get('Sec-Fetch-Site', 'none') not in {'same-origin', 'none'})):
+                return False
+            if host == loopback:
+                return origin == f'http://{loopback}' or (origin is None and not origin_required)
+            if access.enabled and host == access.host:
+                if origin == access.origin or (origin is None and not origin_required):
+                    return access.identified(self.headers)
+            return False
+
+        def reject(self, message, status=403):
+            if access.prompts and self.headers.get('Host') == access.host and status == 403:
+                self.headers_for(401, 'application/json; charset=utf-8', 0, {'WWW-Authenticate': 'Basic realm="omiloc"'})
+                return
+            return self.send_json({'error': message}, status)
+
+        def processing_allowed(self):
+            return (self.client_address[0] in {'127.0.0.1', '::1'}
+                    and self.headers.get('Host') == f'127.0.0.1:{self.server.server_port}')
 
         def headers_for(self, status, content_type, length, extra=None):
             self.send_response(status)
@@ -255,13 +365,12 @@ def handler(library, assets, delete=None, runtime=None, settings=None):
         def settings_request(self):
             from .local_providers import SettingsError
             from .local_stt_services import ActivationIndeterminate
-            expected = f'127.0.0.1:{self.server.server_port}'
-            if (self.headers.get('Host') != expected or self.headers.get('Origin') != f'http://{expected}'
-                    or self.headers.get('X-Omiloc-Request') != 'settings'
-                    or self.headers.get('Sec-Fetch-Site', 'none') not in {'same-origin', 'none'}
-                    or any(k.lower() == 'forwarded' or k.lower().startswith('x-forwarded-') for k in self.headers)):
-                return self.send_json({'error': 'Настройки доступны только на этом Mac.'}, 403)
-            if settings is None:
+            phone = self.path.startswith('/api/processing/')
+            controls = processing if phone else settings
+            if (not self.allowed(request='processing' if phone else 'settings')
+                    or (phone and not self.processing_allowed())):
+                return self.reject('Настройки доступны только на этом Mac.')
+            if controls is None:
                 return self.send_json({'error': 'Настройки недоступны.'}, 503)
             try:
                 length = int(self.headers.get('Content-Length', '0'))
@@ -271,7 +380,7 @@ def handler(library, assets, delete=None, runtime=None, settings=None):
                 if hasattr(self.connection, 'settimeout'):
                     self.connection.settimeout(15)
                 body = json.loads(self.rfile.read(length))
-                self.send_json(settings.dispatch(self.command, self.path, body))
+                self.send_json(controls.dispatch(self.command, self.path, body))
             except SettingsError as error:
                 self.send_json({'error': str(error), **({'field': error.field} if error.field else {})}, error.status)
             except ActivationIndeterminate:
@@ -283,14 +392,10 @@ def handler(library, assets, delete=None, runtime=None, settings=None):
                 self.send_json({'error': 'Не удалось применить настройки. Проверьте готовность сервера.'}, 503)
 
         def do_POST(self):
-            if self.path.startswith('/api/settings/'):
+            if self.path.startswith(('/api/settings/', '/api/processing/')):
                 return self.settings_request()
-            expected = f'127.0.0.1:{self.server.server_port}'
-            if (self.headers.get('Host') != expected or self.headers.get('Origin') != f'http://{expected}'
-                    or self.headers.get('X-Omiloc-Request') != 'open-folder'
-                    or self.headers.get('Sec-Fetch-Site', 'none') not in {'same-origin', 'none'}
-                    or any(k.lower() == 'forwarded' or k.lower().startswith('x-forwarded-') for k in self.headers)):
-                return self.send_json({'error': 'Открыть папку можно только на этом Mac.'}, 403)
+            if not self.allowed(request='open-folder'):
+                return self.reject('Открыть папку можно только на этом Mac.')
             match = re.fullmatch(r'/api/folders/(audio|transcripts)/open', self.path)
             if not match:
                 return self.send_json({'error': 'Папка не найдена.'}, 404)
@@ -303,14 +408,10 @@ def handler(library, assets, delete=None, runtime=None, settings=None):
                 self.send_json({'error': 'Не удалось открыть папку. Проверьте, что она существует и Finder доступен.'}, 503)
 
         def do_DELETE(self):
-            if self.path.startswith('/api/settings/'):
+            if self.path.startswith(('/api/settings/', '/api/processing/')):
                 return self.settings_request()
-            expected = f'127.0.0.1:{self.server.server_port}'
-            if (self.headers.get('Host') != expected or self.headers.get('Origin') != f'http://{expected}'
-                    or self.headers.get('X-Omiloc-Request') != 'delete'
-                    or self.headers.get('Sec-Fetch-Site', 'none') not in {'same-origin', 'none'}
-                    or any(k.lower() == 'forwarded' or k.lower().startswith('x-forwarded-') for k in self.headers)):
-                return self.send_json({'error': 'Удаление доступно только на этом Mac.'}, 403)
+            if not self.allowed(request='delete'):
+                return self.reject('Удаление доступно только на этом Mac.')
             if not delete or not re.fullmatch(r'/api/recordings/[A-Za-z0-9_-]+', self.path):
                 return self.send_json({'error': 'Запись не найдена.'}, 404)
             try:
@@ -335,13 +436,9 @@ def handler(library, assets, delete=None, runtime=None, settings=None):
                 self.send_json({'error': 'Запись недоступна. Обновите список.'}, 404)
 
         def serve(self):
-            expected = f'127.0.0.1:{self.server.server_port}'
             path = urlsplit(self.path).path
-            if (self.headers.get('Host') != expected
-                    or self.headers.get('Origin', f'http://{expected}') != f'http://{expected}'
-                    or any(k.lower() == 'forwarded' or k.lower().startswith('x-forwarded-') for k in self.headers)
-                    or (path.startswith('/api/') and self.headers.get('Sec-Fetch-Site', 'none') not in {'same-origin', 'none'})):
-                return self.send_json({'error': 'Доступ только с этого Mac.'}, 403)
+            if not self.allowed(origin_required=False, api=path.startswith('/api/')):
+                return self.reject('Доступ только с этого Mac.')
             if path in ASSETS:
                 name, mime = ASSETS[path]
                 body = (assets / name).read_bytes()
@@ -361,6 +458,10 @@ def handler(library, assets, delete=None, runtime=None, settings=None):
                 self.send_json(runtime.snapshot())
             elif path == '/api/settings' and settings is not None:
                 self.send_json(settings.read())
+            elif path == '/api/processing' and processing is not None:
+                if not self.processing_allowed():
+                    return self.reject('Настройки доступны только через сопряжённый сервер.')
+                self.send_json(processing.read())
             elif re.fullmatch(r'/api/recordings/[A-Za-z0-9_-]+(?:/audio)?', path):
                 parts = path.split('/')
                 record = library.get(parts[3])
@@ -432,11 +533,18 @@ def main():
     from .local_library_runtime import Runtime
     from .local_provider_api import Settings
 
+    if sys.argv[1:] == ['hash-password']:
+        import getpass
+        password = getpass.getpass('Library password: ')
+        if len(password) < 8 or password != getpass.getpass('Repeat: '):
+            raise SystemExit('Passwords must match and have at least 8 characters.')
+        print('OMI_LIBRARY_PASSWORD_HASH=' + hash_password(password))
+        return
     cfg = config.load_config(Path.cwd(), create_layout=False)
     safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
     server = ThreadingHTTPServer(('127.0.0.1', port(cfg)), handler(
         Library(cfg.layout.services_dir), cfg.repo_root / 'web-local', lambda audio: delete_recording(cfg, audio),
-        Runtime(cfg), Settings(cfg)))
+        Runtime(cfg), Settings(cfg), access=Access.from_env()))
     server.daemon_threads = True
     try:
         server.serve_forever()

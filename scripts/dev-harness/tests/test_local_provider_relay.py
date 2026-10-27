@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 import copy
 import json
 from pathlib import Path
@@ -8,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 import httpx
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dev_harness import local_provider_relay as relay
@@ -32,17 +34,18 @@ def profile(url='wss://speech.example/asr', **settings):
 
 
 class Registry:
-    def __init__(self, snapshot):
+    def __init__(self, snapshot, translation=None):
         self.value = snapshot
+        self.translation = translation
         self.lookups = []
 
     def snapshot(self, stage):
-        assert stage == 'live'
-        return copy.deepcopy(self.value)
+        assert stage in {'live', 'translation'}
+        return copy.deepcopy(self.value if stage == 'live' else self.translation)
 
     def key(self, snapshot):
         self.lookups.append(snapshot['credential_ref'])
-        return 'synthetic-bearer'
+        return 'synthetic-bearer' if snapshot['stage'] == 'live' else 'synthetic-translation-key'
 
 
 class Provider:
@@ -113,6 +116,88 @@ def test_real_asgi_relay_pins_key_preserves_corrections_and_drains(cfg):
             socket.receive_json()
         assert connections[1][0] == 'wss://next.example/asr'
         assert registry.lookups == ['synthetic-key-ref', 'synthetic-key-ref', 'changed-ref']
+
+
+@pytest.mark.parametrize('enable_after_text', [False, True])
+@pytest.mark.parametrize('other_language', [None, 'ru'])
+def test_translation_control_frame_stays_local_and_annotates_snapshots(cfg, monkeypatch, enable_after_text,
+                                                                     other_language):
+    from dev_harness import local_live_translation as translation
+    requests = []
+    def fake_request(settings, key, language, texts, *, other_language=None):
+        requests.append((settings['model'], key, language, list(texts), other_language))
+        if other_language:
+            return [{'source_lang': language, 'lang': other_language, 'text': f'{other_language}:{text}'}
+                    for text in texts]
+        return [f'{language}:{text}' for text in texts]
+    monkeypatch.setattr(translation, 'request_translations', fake_request)
+    card = {'id': 'synthetic-translation', 'name': 'LLM', 'stage': 'translation', 'kind': 'openai-compatible',
+            'settings': {'base_url': 'https://llm.example/v1', 'model': 'qwen3'}, 'credential_ref': 'translation-ref'}
+    registry = Registry(profile(), card)
+    providers = []
+    control = {'type': 'translation', 'language': 'en'}
+    if other_language:
+        control['other_language'] = other_language
+    def connect(endpoint, *, key):
+        provider = Provider()
+        providers.append(provider)
+        return provider
+    with TestClient(relay.create_app(cfg, registry=registry, connector=connect), client=('127.0.0.1', 1234)) as client:
+        with client.websocket_connect('/asr') as socket:
+            socket.receive_json()
+            if not enable_after_text:
+                socket.send_text(json.dumps(control))
+            socket.send_bytes(b'\x01\x00' * 100)
+            first = socket.receive_json()
+            if enable_after_text:
+                assert first['lines'] == [{'text': 'initial', 'start': 0, 'end': .1}]
+                socket.send_text(json.dumps(control))
+                first = socket.receive_json()  # No further audio/snapshot required.
+            assert first['lines'][0]['text'] == 'initial' and first['lines'][0]['translations'] == []
+            assert socket.receive_json() == {'type': 'translation_status', 'status': 'ready'}
+            translated = socket.receive_json()
+            destination = other_language or 'en'
+            assert translated['lines'][0]['translations'] == [{'lang': destination, 'text': f'{destination}:initial'}]
+            assert translated['buffer_transcription'] == 'draft'
+            socket.send_text(json.dumps({'type': 'translation', 'language': ''}))
+            assert socket.receive_json()['lines'] == [{'text': 'initial', 'start': 0, 'end': .1}]
+            socket.send_bytes(b'')
+            assert socket.receive_json()['buffer_transcription'] == 'corrected'
+            assert socket.receive_json() == {'type': 'ready_to_stop'}
+    assert providers[0].sent == [b'\x01\x00' * 100, b'']
+    assert requests == [('qwen3', 'synthetic-translation-key', 'en', ['initial'], other_language)]
+    assert registry.lookups == ['synthetic-key-ref', 'translation-ref']
+
+
+def test_translation_request_without_card_reports_unconfigured(cfg):
+    registry = Registry(profile())
+    with TestClient(relay.create_app(cfg, registry=registry, connector=lambda *a, **k: Provider()),
+                    client=('127.0.0.1', 1234)) as client:
+        with client.websocket_connect('/asr') as socket:
+            socket.receive_json()
+            socket.send_text(json.dumps({'type': 'translation', 'language': 'en'}))
+            socket.send_bytes(b'\x01\x00' * 100)
+            messages = [socket.receive_json(), socket.receive_json()]
+            assert {'type': 'translation_status', 'status': 'unconfigured'} in messages
+            assert any(message.get('lines') == [{'text': 'initial', 'start': 0, 'end': .1}] for message in messages)
+            socket.send_bytes(b'')
+            socket.receive_json()
+            assert socket.receive_json() == {'type': 'ready_to_stop'}
+    assert registry.lookups == ['synthetic-key-ref']
+
+
+def test_unknown_text_frame_still_fails_session(cfg):
+    with TestClient(relay.create_app(cfg, registry=Registry(profile()), connector=lambda *a, **k: Provider()),
+                    client=('127.0.0.1', 1234)) as client:
+        with client.websocket_connect('/asr') as socket:
+            socket.receive_json()
+            socket.send_text('{"type": "other"}')
+            # The provider is still drained before the session reports failure.
+            messages = []
+            with suppress(WebSocketDisconnect):
+                while len(messages) < 4:
+                    messages.append(socket.receive_json())
+            assert {'type': 'error', 'code': 'live_provider_failed'} in messages
 
 
 def test_disabled_handshake_never_resolves_key_or_opens_upstream(cfg):

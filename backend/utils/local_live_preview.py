@@ -20,6 +20,23 @@ from utils.observability.fallback import record_fallback
 logger = logging.getLogger(__name__)
 
 
+def normalize_translation_language(value) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip().lower()
+    return value if re.fullmatch(r'[a-z]{2,3}', value) else None
+
+
+def normalize_translation_languages(language, other_language=None):
+    language = normalize_translation_language(language)
+    if other_language in (None, ''):
+        return language, None
+    other_language = normalize_translation_language(other_language)
+    if not language or not other_language or language == other_language:
+        return None, None
+    return language, other_language
+
+
 def preview_url() -> str | None:
     value = os.getenv('OMI_LOCAL_LIVE_PREVIEW_URL', '').strip()
     if not value:
@@ -142,10 +159,16 @@ class LocalLivePreview:
     FINISH_TIMEOUT = 60.0
     STATUS_TIMEOUT = 1.0
 
-    def __init__(self, url, send_segments, *, unavailable_reason='disabled'):
+    TRANSLATION_STATUSES = frozenset({'ready', 'unconfigured', 'failed'})
+
+    def __init__(self, url, send_segments, *, unavailable_reason='disabled', translation_language=None,
+                 translation_other_language=None):
         self.url = url
         self.send_segments = send_segments
         self.queue = asyncio.Queue()
+        self.translation_language, self.translation_other_language = normalize_translation_languages(
+            translation_language, translation_other_language)
+        self.control_ready = False
         self.pending_bytes = 0
         self.audio_bytes = 0
         self.segment = PreviewSegment()
@@ -177,17 +200,33 @@ class LocalLivePreview:
         return {'state': state, 'labeled_segments': labeled}
 
     @classmethod
-    def from_environment(cls, send_segments):
+    def from_environment(cls, send_segments, *, translation_language=None, translation_other_language=None):
         try:
-            return cls(preview_url(), send_segments)
+            return cls(preview_url(), send_segments, translation_language=translation_language,
+                       translation_other_language=translation_other_language)
         except ValueError:
             # A preview configuration error must never disable WAV capture.
             return cls(None, send_segments, unavailable_reason='invalid_configuration')
 
-    async def _send_status(self, status, reason=None):
+    def set_translation(self, language, other_language=None) -> None:
+        """Relay-side live translation target; an invalid or empty code turns it off."""
+        language, other_language = normalize_translation_languages(language, other_language)
+        if (language, other_language) == (self.translation_language, self.translation_other_language):
+            return
+        self.translation_language = language
+        self.translation_other_language = other_language
+        if self.control_ready and self.accepting:
+            self.queue.put_nowait(self._translation_frame())
+
+    def _translation_frame(self) -> str:
+        return json.dumps({'type': 'translation', 'language': self.translation_language or '',
+                           **({'other_language': self.translation_other_language}
+                              if self.translation_other_language else {})})
+
+    async def _send_status(self, status, reason=None, *, provider='local_live_preview'):
         if not self.deliver:
             return
-        payload = {'type': 'service_status', 'status': status, 'provider': 'local_live_preview'}
+        payload = {'type': 'service_status', 'status': status, 'provider': provider}
         if status == 'stt_failed':
             payload.update(outcome='unavailable', reason=reason, retryable=False)
         try:
@@ -222,6 +261,9 @@ class LocalLivePreview:
             if pcm is None:
                 await socket.send(b'')  # WLK's explicit end-of-input contract.
                 return
+            if isinstance(pcm, str):
+                await socket.send(pcm)  # Relay control frame; never counted as audio.
+                continue
             self.pending_bytes -= len(pcm)
             await socket.send(pcm)
 
@@ -233,6 +275,11 @@ class LocalLivePreview:
                 return
             if message.get('type') == 'error' or message.get('status') == 'error':
                 raise RuntimeError('local_preview_error')
+            if message.get('type') == 'translation_status':
+                # Forward only fixed contract values; the relay never sends content here.
+                if message.get('status') in self.TRANSLATION_STATUSES:
+                    await self._send_status(message['status'], provider='local_live_translation')
+                continue
             status = (message.get('status') if message.get('type') == 'diarization_status'
                       else message.get('diarization_status'))
             if status in {'degraded', 'ready'}:
@@ -274,7 +321,8 @@ class LocalLivePreview:
                                           max_size=self.MAX_SNAPSHOT_BYTES) as socket:
                 # The loopback relay may first negotiate TLS and the selected
                 # remote WLK handshake; only that relay can contact the provider.
-                handshake_timeout = 12 if os.getenv('OMI_LOCAL_LIVE_PROVIDER_RELAY') == '1' else 3
+                relay = os.getenv('OMI_LOCAL_LIVE_PROVIDER_RELAY') == '1'
+                handshake_timeout = 12 if relay else 3
                 config = json.loads(await asyncio.wait_for(socket.recv(), handshake_timeout))
                 if config.get('type') != 'config' or config.get('useAudioWorklet') is not True:
                     raise RuntimeError('local_preview_pcm_contract')
@@ -285,6 +333,12 @@ class LocalLivePreview:
                 self.segment.configure(config)
                 if self.failed:
                     return
+                if relay:
+                    # Only the loopback relay understands control frames; a direct
+                    # WLK socket must keep receiving nothing but PCM16 and EOF.
+                    self.control_ready = True
+                    if self.translation_language:
+                        await socket.send(self._translation_frame())
                 await self._send_status('ready')
                 sender = create_named_task(self._send(socket), name='local-preview-send')
                 receiver = create_named_task(self._receive(socket), name='local-preview-receive')

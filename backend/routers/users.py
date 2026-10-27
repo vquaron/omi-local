@@ -330,6 +330,7 @@ def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     transcription = local_transcription_status()
     if transcription is not None:
         profile['local_transcription'] = transcription
+        profile['local_audio_delivery_version'] = 2
     return profile
 
 

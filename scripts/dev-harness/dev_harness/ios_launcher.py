@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 from .local_env import LocalEnvError
+from .server_presets import clean_environment, load_presets
 
 
 class SessionBusy(Exception):
@@ -133,10 +134,15 @@ def launch(root, mode, *, check=False, build_only=False, lock_path=None):
             if not (check or build_only) and not sys.stdin.isatty():
                 raise LocalEnvError('Run iphone.command in your own terminal for an interactive session.')
             args = command(root, mode, check=check, build_only=build_only)
+            # Debug prepares its own final launch after artifact attestation.
+            # Status/check/build paths never forward provisioning credentials.
+            child_env = clean_environment(os.environ)
+            if mode == 'profile' and not check:
+                load_presets(root)  # Validate before building; payload is created only after install.
             print('Omi Local Dev: Debug with hot reload.' if mode == 'debug'
                   else 'Omi Local: Profile for everyday launches from the app icon; paired local server.', flush=True)
             # The direct child retains the lock even if this wrapper exits first.
-            return subprocess.run(args, cwd=root, pass_fds=(fd,)).returncode
+            return subprocess.run(args, cwd=root, pass_fds=(fd,), env=child_env).returncode
     except SessionBusy:
         print('Another terminal owns the iPhone launcher. Duplicate launch skipped.')
         return 0

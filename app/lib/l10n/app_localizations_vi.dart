@@ -9941,4 +9941,74 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get localMacServers => 'Máy chủ đã lưu';
+
+  @override
+  String get liveTranslation => 'Dịch trực tiếp';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Dịch sang';
+
+  @override
+  String get liveTranslationHelp =>
+      'Máy chủ đã kết nối hiển thị bản dịch dưới bản gốc. Mô hình tóm tắt được dùng tự động trừ khi bạn chọn mô hình khác trong thư viện máy chủ: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Chưa cấu hình mô hình dịch trên máy chủ đã kết nối. Mở thư viện của máy chủ: Settings → Summarization hoặc Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Không thể dịch trên máy chủ đã kết nối. Kiểm tra thư viện của máy chủ: Settings → Translation.';
+
+  @override
+  String get diarization => 'Phân tách người nói';
+
+  @override
+  String get providerUnavailable => 'Máy chủ không khả dụng';
+
+  @override
+  String get providerMisconfigured => 'Kiểm tra cài đặt nhà cung cấp';
+
+  @override
+  String speakersCount(int count) {
+    return '$count người nói';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Chưa phân tách người nói';
+
+  @override
+  String get diarizationFailed => 'Phân tách người nói thất bại';
+
+  @override
+  String get localProcessingHelp =>
+      'Nhãn người nói trực tiếp đến từ nhà cung cấp Live. Tính năng phân tách người nói bên dưới xử lý bản ghi đã hoàn tất.';
+
+  @override
+  String get localProcessingApplyHelp => 'Dừng ghi âm trước khi chuyển. Các máy chủ đã chọn sẽ nhận âm thanh của bạn.';
+
+  @override
+  String get localProcessingKeyHelp => 'Để trống để giữ khóa đã lưu. Máy chủ khác cần khóa riêng.';
+
+  @override
+  String get localProcessingUnsupported => 'Cập nhật máy chủ đã ghép nối để sửa các cài đặt này.';
+
+  @override
+  String get localProcessingFinished => 'Bản ghi đã hoàn tất';
+
+  @override
+  String get localProcessingProbe => 'Kiểm tra kết nối';
+
+  @override
+  String get localProcessingPending => 'Các thay đổi đã lưu chưa có hiệu lực. Nhấn Xác nhận để áp dụng.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Cập nhật máy chủ để đồng bộ âm thanh. Âm thanh đã lưu trên điện thoại được giữ lại.';
+
+  @override
+  String get liveTranslationBidirectional => 'Dịch hai chiều';
+
+  @override
+  String get liveTranslationPairHelp => 'Nhận diện ngôn ngữ của từng câu và dịch sang ngôn ngữ còn lại đã chọn.';
 }

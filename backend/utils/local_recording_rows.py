@@ -29,10 +29,12 @@ def _optional_json(path: Path) -> dict:
         if len(raw) > limit:
             raise ValueError('Invalid local recording state')
         value = json.loads(raw)
-    except FileNotFoundError:
+    except (OSError, ValueError):
+        # These observations must not make the Conversations list/detail fail.
+        # Canonical audio remains available even if a queue or receipt is unreadable.
         return {}
     if not isinstance(value, dict):
-        raise ValueError('Invalid local recording state')
+        return {}
     return value
 
 
@@ -52,8 +54,9 @@ def local_recording_rows(uid: str) -> list[dict]:
         if receipt.parent.is_symlink():
             continue
         data = _optional_json(receipt)
-        if data.get('import') == 'passed':
-            imported.add(data.get('capture_key'))
+        key = data.get('capture_key')
+        if data.get('import') == 'passed' and isinstance(key, str):
+            imported.add(key)
     rows = []
     for folder in (storage / 'listen-captures').glob('*'):
         if folder.is_symlink() or not folder.is_dir():
@@ -62,6 +65,8 @@ def local_recording_rows(uid: str) -> list[dict]:
             capture_id = str(uuid.UUID(folder.name))
             key = hashlib.sha256(capture_id.encode()).hexdigest()
             job = queue.get(key, {})
+            if not isinstance(job, dict):
+                job = {}
             if key in imported or job.get('state') == 'completed':
                 continue
             metadata = _optional_json(folder / 'metadata.json')
@@ -72,11 +77,14 @@ def local_recording_rows(uid: str) -> list[dict]:
                 continue
             if metadata.get('session_id') != capture_id or metadata.get('source') not in {'omi', 'phone'}:
                 continue
-            started = datetime.fromisoformat(metadata['started_at'].replace('Z', '+00:00'))
+            started_at = metadata.get('started_at')
+            if not isinstance(started_at, str):
+                continue
+            started = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
             if started.tzinfo is None:
                 continue
             status = job.get('state', 'saved')
-            if status not in {'pending', 'processing', 'failed', 'no_speech'}:
+            if not isinstance(status, str) or status not in {'pending', 'processing', 'failed', 'no_speech'}:
                 status = 'saved'
             rows.append(Conversation(
                 id=str(uuid.uuid5(uuid.NAMESPACE_URL, 'omi-local-capture:' + capture_id)),
@@ -86,7 +94,7 @@ def local_recording_rows(uid: str) -> list[dict]:
                 transcript_segments=[], discarded=False, deferred=False,
                 external_data={'local_recording': {'status': status, 'duration_seconds': duration}},
             ).model_dump())
-        except (ValueError, KeyError, TypeError, OSError):
+        except (ValueError, KeyError, TypeError, OSError, OverflowError):
             # An incomplete/corrupt capture cannot hide other saved recordings.
             continue
     return rows

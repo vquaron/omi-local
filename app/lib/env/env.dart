@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/flavors.dart';
@@ -35,6 +37,23 @@ abstract class Env {
   static bool isTestFlight = false;
   static bool localTunnelConfigured = false;
   static bool get usesLocalTunnel => isOfflineRuntime && localTunnelConfigured;
+
+  static bool? _physicalIosDeviceForTesting;
+  @visibleForTesting
+  static void setPhysicalIosDeviceForTesting(bool? value) => _physicalIosDeviceForTesting = value;
+
+  /// Resolved once at startup from the native side; until then an iOS build is treated as a phone.
+  static bool iosSimulator = false;
+  static bool get isPhysicalIosDevice => _physicalIosDeviceForTesting ?? (!kIsWeb && Platform.isIOS && !iosSimulator);
+
+  static bool isLoopbackHost(String host) {
+    final normalized = host.trim().toLowerCase().replaceAll(RegExp(r'^\[|\]$'), '');
+    return normalized == 'localhost' || normalized == '::1' || normalized.startsWith('127.');
+  }
+
+  /// The offline build pins the Firebase Auth emulator to the Mac's loopback address,
+  /// which only the simulator shares. A physical iPhone can pair with Local Mac only.
+  static bool get authEmulatorSignInAvailable => !isLoopbackHost(firebaseAuthEmulatorHost) || !isPhysicalIosDevice;
 
   static bool isTailscaleIpv4(String host) {
     final parts = host.split('.');

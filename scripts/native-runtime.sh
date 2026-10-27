@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 command="${1:-open}"
 [[ $# == 0 ]] || shift
 case "$command:$*" in
-  logs:|logs:-f|doctor:|doctor:--inference|bootstrap:|up:|down:|status:|open:|pair:|--install:) ;;
+  logs:|logs:-f|doctor:|doctor:--inference|bootstrap:|up:|down:|status:|open:|pair:|--install:|providers:*) ;;
   *) echo 'Unsupported native command or arguments. Run ./omiloc --help.' >&2; exit 2 ;;
 esac
 source scripts/macos-runtime.sh
@@ -29,4 +29,7 @@ export OMI_HARNESS_PORT_OFFSET="${OMI_HARNESS_PORT_OFFSET:-12000}"
 export PYTHON="${PYTHON:-$PWD/backend/.venv/bin/python}"
 [[ -x "$PYTHON" ]] || { echo 'Native runtime missing. Run: ./omiloc bootstrap' >&2; exit 1; }
 export PYTHONPATH="$PWD/scripts/dev-harness"
+if [[ "$command" == providers ]]; then
+  exec "$PYTHON" -m dev_harness.local_provider_cli "$@"
+fi
 exec "$PYTHON" -m dev_harness.local_setup "$command" "$@"

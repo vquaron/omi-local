@@ -16,6 +16,7 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
+import 'package:omi/widgets/local_recording_timer.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -473,6 +474,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               ),
             ),
           ),
+          if (Env.isOfflineRuntime) LocalRecordingTimer(provider: provider),
           // Star indicator when conversation is marked for starring
           if (provider.isConversationMarkedForStarring) ...[
             const SizedBox(width: 8),

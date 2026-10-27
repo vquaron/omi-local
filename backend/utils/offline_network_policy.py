@@ -36,6 +36,7 @@ _ENDPOINT_ENV = (
     ("API_BASE_URL", None),
     ("OMI_LLM_GATEWAY_URL", None),
     ("OMI_LOCAL_LIVE_PREVIEW_URL", None),
+    ("OMI_LOCAL_PROCESSING_URL", None),
     ("OMI_OFFLINE_ALLOWED_ENDPOINTS", None),
 )
 

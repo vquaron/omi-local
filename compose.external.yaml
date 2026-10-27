@@ -1,0 +1,7 @@
+# Use an external OpenAI-compatible STT server instead of the built-in faster-whisper
+# container. Select that server under Settings → Transcription in the library BEFORE
+# starting with this file: app startup validates the active STT provider.
+# Drop compose.gpu.yaml when using this file; it only configures the built-in stt.
+services:
+  stt:
+    profiles: [builtin-stt]

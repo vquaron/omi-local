@@ -207,6 +207,68 @@ async def test_pcm_preview_stop_drains_eof_and_next_session_is_empty(monkeypatch
     assert preview.pending_bytes == 0
 
 
+class ControlAwareSocket(Socket):
+    """Text control frames are consumed by the relay and never answered with audio snapshots."""
+
+    async def send(self, data):
+        if isinstance(data, str):
+            self.sent.append(data)
+            return
+        await super().send(data)
+
+
+@pytest.mark.parametrize('relay_enabled', [True, False])
+@pytest.mark.parametrize('other_language', [None, 'ru'])
+@pytest.mark.anyio
+async def test_translation_language_reaches_only_the_relay_before_audio(monkeypatch, relay_enabled, other_language):
+    if relay_enabled:
+        monkeypatch.setenv('OMI_LOCAL_LIVE_PROVIDER_RELAY', '1')
+    else:
+        monkeypatch.delenv('OMI_LOCAL_LIVE_PROVIDER_RELAY', raising=False)
+    socket = ControlAwareSocket()
+    monkeypatch.setattr('utils.local_live_preview.websockets.connect', lambda *a, **kw: socket)
+    preview = LocalLivePreview('ws://127.0.0.1:20004/asr', AsyncMock(), translation_language='en',
+                               translation_other_language=other_language)
+    pcm = b'\x01\x00' * 320
+    preview.feed(pcm)
+    for _ in range(20):
+        await asyncio.sleep(0)
+    preview.set_translation('DE', other_language)
+    preview.set_translation('not-a-code')
+    await preview.finish()
+    frames = [json.loads(item) for item in socket.sent if isinstance(item, str)]
+    if relay_enabled:
+        pair = {'other_language': other_language} if other_language else {}
+        assert json.loads(socket.sent[0]) == {'type': 'translation', 'language': 'en', **pair}
+        assert frames == [{'type': 'translation', 'language': 'en', **pair},
+                          {'type': 'translation', 'language': 'de', **pair},
+                          {'type': 'translation', 'language': ''}]
+    else:
+        assert frames == []
+    assert [item for item in socket.sent if isinstance(item, bytes)] == [pcm, b'']
+    assert preview.eof_ack and not preview.failed
+
+
+@pytest.mark.anyio
+async def test_translation_status_is_forwarded_with_fixed_provider_name(monkeypatch):
+    monkeypatch.setenv('OMI_LOCAL_LIVE_PROVIDER_RELAY', '1')
+    socket = ControlAwareSocket(response={'type': 'translation_status', 'status': 'unconfigured'})
+    monkeypatch.setattr('utils.local_live_preview.websockets.connect', lambda *a, **kw: socket)
+    send = AsyncMock()
+    preview = LocalLivePreview('ws://127.0.0.1:20004/asr', send, translation_language='en')
+    preview.feed(b'\x01\x00' * 320)
+    for _ in range(20):
+        await asyncio.sleep(0)
+    statuses = [call.args[0] for call in send.call_args_list if call.args[0].get('type') == 'service_status']
+    assert {'type': 'service_status', 'status': 'unconfigured', 'provider': 'local_live_translation'} in statuses
+    socket.incoming.put_nowait(json.dumps({'type': 'translation_status', 'status': 'weird value'}))
+    for _ in range(10):
+        await asyncio.sleep(0)
+    assert not any(call.args[0].get('status') == 'weird value' for call in send.call_args_list)
+    await preview.finish()
+    assert not preview.failed
+
+
 @pytest.mark.anyio
 async def test_diarized_provider_handshake_reaches_phone_as_complete_snapshot(monkeypatch):
     socket = Socket(config={'diarization': True, 'stt_provider': 'synthetic-live'}, response={
@@ -597,6 +659,69 @@ async def test_library_draft_is_owner_scoped_and_disappears_after_stop(monkeypat
         for owner in owners:
             registry.unregister(owner)
             owner.capture_sink.finalize()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('source,codec', [('phone', 'pcm16'), ('omi', 'opus'), ('omi', 'opus_fs320')])
+async def test_outbox_owned_library_draft_uses_preview_without_server_wav(monkeypatch, source, codec):
+    from utils.local_audio_delivery import initialize_local_capture
+
+    monkeypatch.delenv('OMI_LOCAL_LIVE_PREVIEW_URL', raising=False)
+
+    def owner(uid, text):
+        segment = PreviewSegment()
+        segment.update({'lines': [], 'buffer_transcription': text}, 1.25)
+        session = StatusSession(uid, preview=SimpleNamespace(segment=segment, updates=1, failed=False))
+        session.request.source = source
+        # Receiver normalization must not erase the original CV1 codec in UI metadata.
+        session.request.codec = 'opus' if codec == 'opus_fs320' else codec
+        session.original_codec = codec
+        session.outbox_preview_only, session.capture_sink = initialize_local_capture(
+            offline=True, headers={'x-omi-local-audio-outbox': '1'},
+            session_id='synthetic-recording-canary', source=source, codec=codec, sample_rate=16000, channels=1,
+        )
+        session.outbox_preview_frames = 5
+        session.outbox_preview_pcm_bytes = 40000
+        assert session.outbox_preview_only is True and session.capture_sink is None
+        return session
+
+    current = owner('synthetic-owner', 'текущий черновик')
+    other = owner('synthetic-other', 'чужой черновик')
+    inactive = owner('synthetic-owner', 'неактивный черновик')
+    inactive.state.active = False
+    closed = owner('synthetic-owner', 'закрытый черновик')
+    closed.state.shutdown_event.set()
+    unvalidated = owner('synthetic-owner', 'неподтверждённый черновик')
+    unvalidated.outbox_preview_only = False
+    sessions = [current, other, inactive, closed, unvalidated]
+    for session in sessions:
+        registry.register(session)
+    try:
+        data = await local_status.preview_snapshot('synthetic-owner')
+        assert len(data['sessions']) == 1
+        draft = data['sessions'][0]
+        fields = ('source', 'codec', 'audio_seconds', 'frames_received', 'decode_errors')
+        assert {key: draft[key] for key in fields} == {
+            'source': source, 'codec': codec, 'audio_seconds': 1.25, 'frames_received': 5, 'decode_errors': 0,
+        }
+        assert draft['text'] == 'текущий черновик' and draft['segments'][0]['text'] == draft['text']
+        assert draft['preview_id'] == current.local_preview.segment.id and draft['revision'] == 1
+        encoded = json.dumps(data, ensure_ascii=False)
+        assert all(value not in encoded for value in (
+            'synthetic-owner', 'synthetic-other', 'synthetic-recording-canary', 'чужой черновик',
+            'неактивный черновик', 'закрытый черновик', 'неподтверждённый черновик',
+        ))
+        current.local_preview.segment.update({'lines': [], 'buffer_transcription': 'исправлено'}, 1.25)
+        corrected = (await local_status.preview_snapshot('synthetic-owner'))['sessions'][0]
+        assert corrected['text'] == 'исправлено' and corrected['revision'] == 2
+        current.local_preview.segment.update({'lines': [], 'buffer_transcription': ''}, 1.25)
+        retracted = (await local_status.preview_snapshot('synthetic-owner'))['sessions'][0]
+        assert retracted['text'] == '' and retracted['segments'] == [] and retracted['revision'] == 3
+        current.state.shutdown_event.set()
+        assert (await local_status.preview_snapshot('synthetic-owner'))['sessions'] == []
+    finally:
+        for session in sessions:
+            registry.unregister(session)
 
 
 @pytest.mark.anyio

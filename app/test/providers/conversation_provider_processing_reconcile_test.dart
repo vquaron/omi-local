@@ -15,6 +15,22 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
+  test('a previous server detail response cannot overwrite the selected server after the owner fence', () async {
+    final pending = Completer<ServerConversation?>();
+    final provider = ConversationProvider(isSignedIn: () => true);
+    addTearDown(provider.dispose);
+    provider.conversationDetailsFetcherOverride = (_) => pending.future;
+    final previous = _conversation('shared-id', status: ConversationStatus.completed);
+    provider.conversations = [previous];
+    final loading = provider.updateSearchedConvoDetails(previous.id);
+    provider.clearUserData();
+    final selected = _conversation('shared-id', status: ConversationStatus.completed);
+    provider.conversations = [selected];
+    pending.complete(previous);
+    await loading;
+    expect(provider.conversations.single, same(selected));
+  });
+
   test('successful empty server page clears a recording deleted outside the app and its cache', () async {
     final stale = _conversation('deleted-on-mac', status: ConversationStatus.completed);
     SharedPreferencesUtil().cachedConversations = [stale];
@@ -634,15 +650,12 @@ void main() {
           50,
           (index) => _conversation('page-$index', status: ConversationStatus.completed),
         ),
-        ok: true
+        ok: true,
       ),
       isSignedIn: () => true,
     );
-    provider.conversationPageFetcherOverride = () async => (
-          items: [_conversation('page-50', status: ConversationStatus.completed)],
-          ok: true,
-          truncated: true,
-        );
+    provider.conversationPageFetcherOverride = () async =>
+        (items: [_conversation('page-50', status: ConversationStatus.completed)], ok: true, truncated: true);
     addTearDown(provider.dispose);
 
     await provider.fetchConversations();
@@ -903,8 +916,11 @@ void main() {
 
     final more = provider.getMoreConversationsFromServer();
     final refresh = provider.fetchConversations();
-    page.complete(
-        (items: [_conversation('page-50', status: ConversationStatus.completed)], ok: true, truncated: false));
+    page.complete((
+      items: [_conversation('page-50', status: ConversationStatus.completed)],
+      ok: true,
+      truncated: false,
+    ));
     await more;
     expect(provider.isLoadingConversations, isTrue);
     lifecycle.complete((item: _conversation('c1', status: ConversationStatus.processing), ok: true));
@@ -1095,13 +1111,12 @@ ServerConversation _conversation(
   bool starred = false,
   String? folderId,
   String title = 'Title',
-}) =>
-    ServerConversation(
-      id: id,
-      createdAt: createdAt ?? DateTime.utc(2026),
-      structured: Structured(title, 'Overview'),
-      status: status,
-      discarded: discarded,
-      starred: starred,
-      folderId: folderId,
-    );
+}) => ServerConversation(
+  id: id,
+  createdAt: createdAt ?? DateTime.utc(2026),
+  structured: Structured(title, 'Overview'),
+  status: status,
+  discarded: discarded,
+  starred: starred,
+  folderId: folderId,
+);

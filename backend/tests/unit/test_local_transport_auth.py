@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import pytest
+import httpx
 from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -110,6 +111,93 @@ def test_pairing_diagnostics_only_include_response_status(pairing, caplog):
         assert c.get("/openapi.json").status_code == 401
     messages = [record.getMessage() for record in caplog.records if record.name == "utils.local_transport_auth"]
     assert messages == ["Local Mac profile check: status=200", "Local Mac profile check: status=401"]
+
+
+@pytest.fixture
+def processing_client(pairing, monkeypatch):
+    from routers import local_processing
+    monkeypatch.setenv('OMI_LOCAL_PROCESSING_URL', 'http://127.0.0.1:20001')
+    calls = []
+    responses = []
+    def handle(request):
+        calls.append(request)
+        reply = responses.pop(0) if responses else httpx.Response(200, json={'revision': 0, 'profiles': [], 'effective': {}})
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+    original = httpx.AsyncClient
+    monkeypatch.setattr(local_processing.httpx, 'AsyncClient',
+                        lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs))
+    app = FastAPI()
+    app.include_router(local_processing.router)
+    app.add_middleware(OfflineRoutePolicyMiddleware)
+    app.add_middleware(LocalTransportAuthMiddleware)
+    with TestClient(app) as test_client:
+        yield test_client, calls, responses
+
+
+def test_processing_phone_is_paired_and_only_forwards_to_fixed_library(processing_client):
+    client, calls, responses = processing_client
+    assert client.get('/v1/local/processing').status_code == 401
+    headers = {'Authorization': 'Bearer ' + KEY, 'Host': 'untrusted.example'}
+    response = client.get('/v1/local/processing?uid=attacker&url=https://untrusted.example', headers=headers)
+    assert response.status_code == 200 and response.headers['Cache-Control'] == 'no-store'
+    assert str(calls[0].url) == 'http://127.0.0.1:20001/api/processing'
+    assert calls[0].headers['Origin'] == 'http://127.0.0.1:20001'
+    assert calls[0].headers['X-Omiloc-Request'] == 'processing'
+    assert 'authorization' not in calls[0].headers
+    body = {'revision': 2, 'profile': {'stage': 'live', 'kind': 'external'}, 'api_key': 'synthetic-provider-secret'}
+    response = client.post('/v1/local/processing/save', headers=headers, json=body)
+    assert response.status_code == 200 and json.loads(calls[-1].content) == body
+    assert 'synthetic-provider-secret' not in response.text
+    assert str(calls[-1].url).endswith('/api/processing/save')
+    response = client.request('DELETE', '/v1/local/processing/profiles/synthetic-id', headers=headers, json={'revision': 2})
+    assert response.status_code == 200 and str(calls[-1].url).endswith('/api/processing/profiles/synthetic-id')
+
+
+def test_processing_bounds_bodies_and_preserves_safe_conflicts(processing_client):
+    client, calls, responses = processing_client
+    headers = {'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json'}
+    assert client.post('/v1/local/processing/save', headers=headers, content='[]').status_code == 400
+    assert client.post('/v1/local/processing/save', headers=headers, content='invalid').status_code == 400
+    assert client.post('/v1/local/processing/save', headers=headers, content='x' * 65537).status_code == 413
+    assert not calls
+    responses.append(httpx.Response(409, json={'error': 'Настройки изменились в другом окне.'}))
+    response = client.post('/v1/local/processing/activate', headers=headers, json={'revision': 0, 'stage': 'live', 'id': None})
+    assert response.status_code == 409 and response.json()['error'] == 'Настройки изменились в другом окне.'
+
+
+def test_processing_unknown_outcome_and_redirect_never_retry(processing_client):
+    client, calls, responses = processing_client
+    headers = {'Authorization': 'Bearer ' + KEY}
+    responses.append(httpx.ReadTimeout('synthetic-private-server-details'))
+    response = client.post('/v1/local/processing/activate', headers=headers, json={'revision': 0, 'stage': 'live', 'id': None})
+    assert response.status_code == 503 and response.json()['outcome'] == 'indeterminate'
+    assert len(calls) == 1 and 'synthetic-private' not in response.text
+    responses.append(httpx.Response(307, headers={'Location': 'https://untrusted.example'}))
+    assert client.get('/v1/local/processing', headers=headers).status_code == 503
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('origin', ['', 'http://192.168.1.20:20001', 'https://127.0.0.1:20001',
+                                    'http://127.0.0.1:20001/api/settings', 'http://key@127.0.0.1:20001'])
+def test_processing_rejects_non_loopback_configuration(processing_client, monkeypatch, origin):
+    client, calls, _ = processing_client
+    monkeypatch.setenv('OMI_LOCAL_PROCESSING_URL', origin)
+    assert client.get('/v1/local/processing', headers={'Authorization': 'Bearer ' + KEY}).status_code == 503
+    assert not calls
+
+
+def test_processing_disabled_for_legacy_lan_and_standard_runtime(monkeypatch):
+    from routers.local_processing import router
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+        monkeypatch.setenv('OMI_LOCAL_TRANSPORT', 'lan')
+        assert client.get('/v1/local/processing', headers={'Authorization': 'Bearer ' + KEY}).status_code == 404
+        monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+        assert client.get('/v1/local/processing').status_code == 404
 
 
 def test_listen_diagnostics_observe_frames_and_close_without_private_content(pairing, caplog):

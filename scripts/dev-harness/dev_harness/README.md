@@ -11,6 +11,10 @@ The provider settings subsystem uses these boundaries:
 - `local_provider_api` and `local_provider_probe`: same-origin library operations
   and metadata checks. `local_provider_http` enforces explicit destinations,
   no redirects/proxy inheritance, bounded metadata reads and sanitized errors.
+- `local_provider_cli`: local operator JSON import/export and explicit selection
+  through that same registry. `Processing` in `local_provider_api` narrows the
+  paired phone bridge to selecting prepared profiles and editing network adapters;
+  the backend sees only the harness-generated loopback `OMI_LOCAL_PROCESSING_URL`.
 - `local_stt_watch` pins a pipeline per admitted recording. `local_stt` owns
   WAV provenance, the inference lock and backend import; `local_pipeline` caches
   completed STT/diarization/summary stages without switching providers on failure.

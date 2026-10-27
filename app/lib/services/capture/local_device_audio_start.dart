@@ -21,11 +21,14 @@ class LocalDeviceAudioStart {
   bool inputStopped = false;
   bool stopping = false;
   bool invalidated = false;
+  // Production supplies the same BleDeviceSource parser used after startup.
+  void Function(List<int>)? journalPacket;
   StateError? _failure;
 
   void receive(List<int> packet) {
     if (inputStopped || invalidated || packet.length <= 3) return;
     final snapshot = List<int>.from(packet);
+    journalPacket?.call(snapshot);
     final receiver = _receiver;
     if (receiver != null) {
       receiver(snapshot);
@@ -42,6 +45,15 @@ class LocalDeviceAudioStart {
     subscription = await pending;
     if (inputStopped || invalidated) await subscription?.cancel();
     return subscription != null && !invalidated;
+  }
+
+  void journalTo(void Function(List<int>) journal) {
+    if (invalidated) return;
+    if (_failure != null) throw _failure!;
+    for (final packet in _packets) {
+      journal(packet);
+    }
+    journalPacket = journal;
   }
 
   void forwardTo(void Function(List<int>) receiver) {

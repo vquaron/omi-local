@@ -9961,4 +9961,75 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get localMacServers => 'Kayıtlı sunucular';
+
+  @override
+  String get liveTranslation => 'Canlı çeviri';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Şu dile çevir';
+
+  @override
+  String get liveTranslationHelp =>
+      'Bağlı sunucu çeviriyi özgün metnin altında gösterir. Sunucu kitaplığında başka bir model seçmediğiniz sürece özetleme modeli otomatik kullanılır: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Bağlı sunucuda çeviri modeli yapılandırılmamış. Kitaplığını açın: Settings → Summarization veya Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Bağlı sunucuda çeviri kullanılamıyor. Kitaplığını kontrol edin: Settings → Translation.';
+
+  @override
+  String get diarization => 'Konuşmacı ayrımı';
+
+  @override
+  String get providerUnavailable => 'Sunucu kullanılamıyor';
+
+  @override
+  String get providerMisconfigured => 'Sağlayıcı ayarlarını kontrol edin';
+
+  @override
+  String speakersCount(int count) {
+    return '$count konuşmacı';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Konuşmacı ayrımı yapılmadı';
+
+  @override
+  String get diarizationFailed => 'Konuşmacı ayrımı başarısız';
+
+  @override
+  String get localProcessingHelp =>
+      'Canlı konuşmacı etiketleri Live sağlayıcısından gelir. Aşağıdaki konuşmacı ayrımı tamamlanmış kayıtları işler.';
+
+  @override
+  String get localProcessingApplyHelp => 'Değiştirmeden önce kaydı durdurun. Seçilen sunucular sesinizi alır.';
+
+  @override
+  String get localProcessingKeyHelp =>
+      'Boş bırakmak kayıtlı anahtarı korur. Farklı bir sunucu kendi anahtarını gerektirir.';
+
+  @override
+  String get localProcessingUnsupported => 'Bu ayarları düzenlemek için eşleştirilmiş sunucuyu güncelleyin.';
+
+  @override
+  String get localProcessingFinished => 'Tamamlanan kayıtlar';
+
+  @override
+  String get localProcessingProbe => 'Bağlantıyı test et';
+
+  @override
+  String get localProcessingPending => 'Kaydedilen değişiklikler henüz etkin değil. Uygulamak için Onayla’ya dokunun.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Sesi eşitlemek için sunucuyu güncelleyin. Telefona kaydedilen ses korunur.';
+
+  @override
+  String get liveTranslationBidirectional => 'Çift yönlü çeviri';
+
+  @override
+  String get liveTranslationPairHelp => 'Her ifadenin dilini algıla ve seçilen diğer dile çevir.';
 }

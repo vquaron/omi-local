@@ -9774,4 +9774,71 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get localMacServers => '저장된 서버';
+
+  @override
+  String get liveTranslation => '실시간 번역';
+
+  @override
+  String get liveTranslationTargetLanguage => '번역할 언어';
+
+  @override
+  String get liveTranslationHelp =>
+      '연결된 서버에서 번역하여 원문 아래에 표시합니다. 서버 라이브러리의 Settings → Translation에서 다른 모델을 선택하지 않으면 요약 모델이 자동으로 사용됩니다.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      '연결된 서버에 번역 모델이 설정되지 않았습니다. 서버 라이브러리에서 Settings → Summarization 또는 Translation → Save → Use를 여세요.';
+
+  @override
+  String get liveTranslationFailed => '연결된 서버에서 번역을 사용할 수 없습니다. 서버 라이브러리의 Settings → Translation을 확인하세요.';
+
+  @override
+  String get diarization => '화자 분리';
+
+  @override
+  String get providerUnavailable => '서버를 사용할 수 없음';
+
+  @override
+  String get providerMisconfigured => '제공자 설정을 확인하세요';
+
+  @override
+  String speakersCount(int count) {
+    return '화자 $count명';
+  }
+
+  @override
+  String get diarizationNotPerformed => '화자 분리가 수행되지 않음';
+
+  @override
+  String get diarizationFailed => '화자 분리 실패';
+
+  @override
+  String get localProcessingHelp => '실시간 화자 라벨은 Live 제공업체에서 받습니다. 아래 화자 분리는 완료된 녹음을 처리합니다.';
+
+  @override
+  String get localProcessingApplyHelp => '전환하기 전에 녹음을 중지하세요. 선택한 서버로 오디오가 전송됩니다.';
+
+  @override
+  String get localProcessingKeyHelp => '비워 두면 저장된 키가 유지됩니다. 다른 서버에는 해당 서버의 키가 필요합니다.';
+
+  @override
+  String get localProcessingUnsupported => '이 설정을 수정하려면 연결된 서버를 업데이트하세요.';
+
+  @override
+  String get localProcessingFinished => '완료된 녹음';
+
+  @override
+  String get localProcessingProbe => '연결 테스트';
+
+  @override
+  String get localProcessingPending => '저장된 변경 사항이 아직 적용되지 않았습니다. 확인을 눌러 적용하세요.';
+
+  @override
+  String get localAudioServerUpdateRequired => '오디오를 동기화하려면 서버를 업데이트하세요. 휴대전화에 저장된 오디오는 유지됩니다.';
+
+  @override
+  String get liveTranslationBidirectional => '양방향 번역';
+
+  @override
+  String get liveTranslationPairHelp => '각 문장의 언어를 감지하여 선택한 다른 언어로 번역합니다.';
 }

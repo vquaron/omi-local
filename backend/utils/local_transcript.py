@@ -72,6 +72,32 @@ def normalize_segments(raw: dict, duration: float, conversation_id: str,
     return result
 
 
+STAGE_STATUSES = {'ready', 'failed', 'disabled', 'no_speech', 'pending', 'processing'}
+
+
+def stage_outcomes(raw: dict) -> dict | None:
+    """Fixed per-stage outcome fields for the phone; provider names only, never settings or keys."""
+    processing = raw.get('processing')
+    if not isinstance(processing, dict):
+        return None
+    stages = {}
+    for stage in ('stt', 'diarization', 'summary'):
+        entry = processing.get(stage)
+        if not isinstance(entry, dict):
+            continue
+        status = entry.get('status')
+        row = {'status': status if status in STAGE_STATUSES else 'unknown'}
+        provider = entry.get('provider_name')
+        if isinstance(provider, str) and provider.strip() and provider.isprintable():
+            row['provider'] = provider[:100]
+        if stage == 'diarization':
+            speakers = (raw.get('diarization') or {}).get('speakers') if isinstance(raw.get('diarization'), dict) else None
+            if type(speakers) is int and 0 <= speakers <= 10_000:
+                row['speakers'] = speakers
+        stages[stage] = row
+    return stages
+
+
 def build_conversation(raw: dict, manifest: dict) -> Conversation:
     digest = manifest['audio_sha256']
     if not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest):
@@ -107,5 +133,6 @@ def build_conversation(raw: dict, manifest: dict) -> Conversation:
         transcript_segments=segments, status='completed', uses_custom_stt=True,
         discarded=False, deferred=False,
         external_data={'local_transcript': {'version': 1, 'audio_sha256': digest, 'result_key': result_key,
-                                            'profile': manifest['profile']}},
+                                            'profile': manifest['profile'],
+                                            **({'stages': stages} if (stages := stage_outcomes(raw)) is not None else {})}},
     )

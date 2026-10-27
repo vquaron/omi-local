@@ -6,7 +6,6 @@ import argparse
 import getpass
 import hashlib
 import json
-import ipaddress
 import os
 import re
 import secrets
@@ -17,37 +16,14 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote
 
 from . import cli, config, safety, local_stt, local_stt_watch, local_library, local_live, local_transcription
+from .local_transport import normalize_https_url
 
 
 class LocalMacError(ValueError):
     """Static, credential-free diagnostics safe to show in the local terminal."""
-
-
-def endpoint(value: str) -> str:
-    uri = urlsplit(value.strip())
-    if (
-        uri.scheme != "https"
-        or not uri.hostname
-        or uri.username
-        or uri.password
-        or uri.port not in (None, 443)
-        or uri.query
-        or uri.fragment
-        or uri.path not in ("", "/")
-    ):
-        raise LocalMacError("Enter an HTTPS server address without a path or credentials")
-    if not re.fullmatch(r"[a-zA-Z0-9.-]+", uri.hostname) or "." not in uri.hostname:
-        raise LocalMacError("Enter the HTTPS domain assigned by ngrok")
-    try:
-        ipaddress.ip_address(uri.hostname)
-    except ValueError:
-        pass
-    else:
-        raise LocalMacError("Enter the domain assigned by ngrok, not an IP address")
-    return f"https://{uri.hostname.lower()}"
 
 
 def private_json(path: Path, value: dict) -> None:
@@ -79,7 +55,7 @@ def read_config(cfg) -> dict:
     if not path.is_file() or path.is_symlink() or path.stat().st_mode & 0o077:
         raise LocalMacError("Run configure in a local terminal first")
     data = json.loads(path.read_text())
-    data["url"] = endpoint(data["url"])
+    data["url"] = normalize_https_url(data["url"])
     return data
 
 
@@ -156,7 +132,7 @@ def configure(cfg, *, rotate: bool = False, edit: bool = False) -> None:
         existing = read_config(cfg)["url"] if current.exists() else ""
         print('Ngrok: https://dashboard.ngrok.com - address under Domains, token under Your Authtoken.')
         print('For account setup, see docs/NGROK.md.')
-        url = endpoint(values.get("NGROK_URL") or input(f"Ngrok HTTPS address [{existing}]: ").strip() or existing)
+        url = normalize_https_url(values.get("NGROK_URL") or input(f"Ngrok HTTPS address [{existing}]: ").strip() or existing)
         token = values.get("NGROK_AUTHTOKEN") or getpass.getpass(
             "Ngrok authtoken (hidden; Enter to reuse the saved token): "
         ).strip()

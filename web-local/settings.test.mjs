@@ -5,6 +5,10 @@ import {processingRows, renderProcessing} from './recording-processing.mjs';
 
 test('adapters expose supported settings and preserve independent diarization', () => {
   assert.deepEqual(providerFields(providerDefaults('live', 'external')).map(field => field.key), ['url']);
+  assert.deepEqual(providerFields(providerDefaults('summary', 'openai-compatible')).map(field => field.key), ['base_url', 'model', 'reasoning']);
+  assert.equal(providerDefaults('summary', 'openai-compatible').settings.reasoning, 'default');
+  assert.deepEqual(providerFields(providerDefaults('translation')).map(field => field.key), ['base_url', 'model', 'reasoning']);
+  assert.equal(providerDefaults('translation').kind, 'openai-compatible');
   for (const kind of ['whisperkit', 'whisperx', 'parakeet-mlx', 'openai-compatible']) {
     assert.equal(providerDefaults('stt', kind).settings.diarization_model, 'none');
     assert.ok(!providerFields(providerDefaults('stt', kind)).some(field => field.key.startsWith('speaker_')));
@@ -102,6 +106,49 @@ function serverState() {
   return {version: 1, revision: 7, profiles: [profile], active: {live: null, stt: null, diarization: null, summary: profile.id},
     effective: {live: null, stt: null, diarization: null, summary: structuredClone(profile)}};
 }
+
+test('translation settings explain the server model used automatically', async t => {
+  const ui = dom(t), state = serverState();
+  state.active.translation = null;
+  state.effective.translation = {...state.effective.summary, stage: 'translation', inherited_from: 'summary'};
+  const settings = mountSettings(ui.root, {request: async () => structuredClone(state)});
+  await settings.show();
+  ui.click('Перевод');
+  assert.match(ui.root.textContent, /Автоматически: используется модель суммаризации этого сервера/);
+  assert.match(ui.root.textContent, /Действует: Local model/);
+  const automatic = ui.root.querySelectorAll('button').find(b => b.textContent === 'Использовать модель суммаризации');
+  assert.equal(automatic.disabled, true);
+});
+
+test('finished-recording speaker selection stays independent of the live server', async t => {
+  const ui = dom(t), calls = [], state = serverState();
+  const live = {...providerDefaults('live', 'external'), id: 'live-1', name: 'Live server'};
+  live.settings.url = 'wss://speech.example/asr';
+  const speakers = {...providerDefaults('diarization', 'mycelia'), id: 'speakers-1', name: 'Recording speakers'};
+  speakers.settings.base_url = 'https://speakers.example';
+  state.profiles.push(live, speakers);
+  state.active.live = live.id; state.effective.live = structuredClone(live);
+  const settings = mountSettings(ui.root, {request: async (path, body) => {
+    calls.push({path, body});
+    if (path === '/activate') {
+      state.active[body.stage] = body.id;
+      state.effective[body.stage] = structuredClone(state.profiles.find(profile => profile.id === body.id));
+      state.revision++;
+    }
+    return structuredClone(state);
+  }});
+  await settings.show();
+  assert.match(ui.root.textContent, /Mac или контейнер/);
+  assert.match(ui.root.textContent, /разделение говорящих в реальном времени/i);
+  ui.click('Диаризация');
+  assert.match(ui.root.textContent, /в готовой записи/);
+  ui.click('Использовать'); await settle();
+  assert.deepEqual(calls.at(-1), {path: '/activate', body: {revision: 7, stage: 'diarization', id: speakers.id}});
+  assert.match(ui.root.textContent, /Действует: Recording speakers/);
+  ui.click('Live STT');
+  assert.match(ui.root.textContent, /Действует: Live server/);
+  assert.equal(calls.filter(call => call.path === '/activate').length, 1);
+});
 
 test('editing and checking a draft does not save or activate; save and use are distinct actions', async t => {
   const ui = dom(t), calls = [], state = serverState();

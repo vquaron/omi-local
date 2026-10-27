@@ -9995,4 +9995,78 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get localMacServers => 'Mentett szerverek';
+
+  @override
+  String get liveTranslation => 'Élő fordítás';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Fordítás erre';
+
+  @override
+  String get liveTranslationHelp =>
+      'A csatlakoztatott szerver a fordítást az eredeti alatt jeleníti meg. Automatikusan az összefoglaló modellt használja, hacsak nem választ másikat a szerver könyvtárában: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Nincs fordítási modell beállítva a csatlakoztatott szerveren. Nyissa meg a könyvtárát: Settings → Summarization vagy Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'A fordítás nem érhető el a csatlakoztatott szerveren. Ellenőrizze a könyvtárát: Settings → Translation.';
+
+  @override
+  String get diarization => 'Beszélőfelismerés';
+
+  @override
+  String get providerUnavailable => 'A szerver nem elérhető';
+
+  @override
+  String get providerMisconfigured => 'Ellenőrizze a szolgáltató beállításait';
+
+  @override
+  String speakersCount(int count) {
+    return '$count beszélő';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Beszélőfelismerés nem történt';
+
+  @override
+  String get diarizationFailed => 'Beszélőfelismerés sikertelen';
+
+  @override
+  String get localProcessingHelp =>
+      'Az élő beszélőcímkék a Live szolgáltatótól érkeznek. Az alábbi diarizáció befejezett felvételeket dolgoz fel.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'Váltás előtt állítsd le a felvételt. A kiválasztott szerverek megkapják a hangodat.';
+
+  @override
+  String get localProcessingKeyHelp =>
+      'Az üres mező megőrzi a mentett kulcsot. Másik szerverhez saját kulcs szükséges.';
+
+  @override
+  String get localProcessingUnsupported => 'A beállítások szerkesztéséhez frissítsd a párosított szervert.';
+
+  @override
+  String get localProcessingFinished => 'Befejezett felvételek';
+
+  @override
+  String get localProcessingProbe => 'Kapcsolat tesztelése';
+
+  @override
+  String get localProcessingPending =>
+      'A mentett módosítások még nem aktívak. Az alkalmazásukhoz koppintson a Megerősítés gombra.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'A hang szinkronizálásához frissítsd a szervert. A telefonon mentett hang megmarad.';
+
+  @override
+  String get liveTranslationBidirectional => 'Kétirányú fordítás';
+
+  @override
+  String get liveTranslationPairHelp =>
+      'Minden mondat nyelvének felismerése és lefordítása a másik kiválasztott nyelvre.';
 }

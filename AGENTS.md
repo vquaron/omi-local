@@ -21,7 +21,10 @@ Docker publishes only its paired ingress on that host IP. Keep all emulators loc
 its owned loopback stack; never expose the LAN development backend or emulators.
 Run `make test-offline` and `make test-transport-app` before the separate final iOS
 build/attestation. Finished-WAV WhisperKit/WhisperX/Parakeet transcription is documented in `docs/LOCAL_STT.md`;
-autonomous phone batch upload remains outside the current scope.
+Paired phone capture uses the durable outbox in `docs/RECORDING_DURABILITY.md`.
+Persist accepted audio before live preview; only a matching durable server receipt
+permits removal of a phone part. Keep legacy WebSocket capture for shipped clients.
+Physical background endurance and clean-machine recovery require fresh evidence.
 Provider settings and explicit remote processing live in the harness; see
 `docs/PROVIDERS.md`. Keep backend egress loopback-only, with remote Live behind its owned relay.
 For graceful harness shutdown, signal the validated supervisor once: both guards

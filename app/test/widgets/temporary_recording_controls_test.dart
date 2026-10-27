@@ -35,6 +35,9 @@ class _Capture extends CaptureProvider {
   bool deviceConnected = true;
   bool muted = false;
   bool failStart = false;
+  Duration? journalDuration;
+  @override
+  Duration? get localRecordingDuration => journalDuration;
   Completer<void>? startGate;
   OmiButtonEvent? buttonEvent;
   LocalOmiButtonAction? buttonAction;
@@ -100,6 +103,7 @@ class _Capture extends CaptureProvider {
   @override
   Future<void> stopStreamRecording({String reason = 'user_stopped'}) async {
     calls.add('phone:stop');
+    journalDuration = null;
     updateRecordingState(RecordingState.stop);
   }
 }
@@ -132,6 +136,41 @@ void main() {
     Env.setRuntimeModeForTesting(OmiRuntimeMode.offline);
   });
   tearDown(() => Env.setRuntimeModeForTesting(null));
+
+  testWidgets('local live page exposes journal timer and Stop before any transcript while interrupted', (tester) async {
+    final capture = _Capture();
+    final device = _IdleDevice();
+    addTearDown(capture.dispose);
+    addTearDown(device.dispose);
+    capture.journalDuration = const Duration(seconds: 42);
+    capture.updateRecordingState(RecordingState.interrupted);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+          ChangeNotifierProvider<DeviceProvider>.value(value: device),
+        ],
+        child: const MaterialApp(
+          locale: Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ConversationCapturingPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('00:00:42'), findsOneWidget);
+    capture.journalDuration = const Duration(seconds: 43);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('00:00:43'), findsOneWidget, reason: 'Sample time updates without an ASR event or server poll');
+    await tester.tap(find.byKey(const Key('temporary_stop_recording')));
+    await tester.pump();
+    expect(capture.calls, ['phone:stop']);
+    expect(capture.recordingState, RecordingState.stop);
+    expect(find.text('00:00:43'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('live screen reports adapter failure and recovers only on preview readiness', (tester) async {
     final capture = _Capture();

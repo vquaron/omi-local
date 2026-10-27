@@ -242,8 +242,11 @@ def main() -> int:
             signal.signal(signal.SIGINT, interrupt)
             signal.signal(signal.SIGTERM, interrupt)
             worker = Worker(cfg)
+            from .local_provider_health import Monitor
+            monitor = Monitor(cfg)
             while settings(cfg)['enabled']:
                 worker.tick()
+                monitor.tick()
                 time.sleep(POLL_SECONDS)
     except KeyboardInterrupt:
         return 0

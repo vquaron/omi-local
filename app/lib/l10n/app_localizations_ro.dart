@@ -10001,4 +10001,75 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get localMacServers => 'Servere salvate';
+
+  @override
+  String get liveTranslation => 'Traducere în direct';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Tradu în';
+
+  @override
+  String get liveTranslationHelp =>
+      'Serverul conectat afișează traducerea sub original. Modelul de rezumare este folosit automat, dacă nu alegi altul în biblioteca serverului: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Niciun model de traducere nu este configurat pe serverul conectat. Deschide biblioteca: Settings → Summarization sau Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Traducerea nu este disponibilă pe serverul conectat. Verifică biblioteca: Settings → Translation.';
+
+  @override
+  String get diarization => 'Diarizare';
+
+  @override
+  String get providerUnavailable => 'Server indisponibil';
+
+  @override
+  String get providerMisconfigured => 'Verificați setările furnizorului';
+
+  @override
+  String speakersCount(int count) {
+    return '$count vorbitori';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Diarizarea nu a fost efectuată';
+
+  @override
+  String get diarizationFailed => 'Diarizarea a eșuat';
+
+  @override
+  String get localProcessingHelp =>
+      'Etichetele vorbitorilor în direct vin de la furnizorul Live. Diarizarea de mai jos procesează înregistrări finalizate.';
+
+  @override
+  String get localProcessingApplyHelp =>
+      'Oprește înregistrarea înainte de schimbare. Serverele selectate primesc sunetul tău.';
+
+  @override
+  String get localProcessingKeyHelp => 'Câmpul gol păstrează cheia salvată. Un alt server necesită propria cheie.';
+
+  @override
+  String get localProcessingUnsupported => 'Actualizează serverul asociat pentru a modifica aceste setări.';
+
+  @override
+  String get localProcessingFinished => 'Înregistrări finalizate';
+
+  @override
+  String get localProcessingProbe => 'Testează conexiunea';
+
+  @override
+  String get localProcessingPending => 'Modificările salvate nu sunt active. Atinge Confirmă pentru a le aplica.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Actualizați serverul pentru a sincroniza sunetul. Sunetul salvat pe telefon este păstrat.';
+
+  @override
+  String get liveTranslationBidirectional => 'Traducere bidirecțională';
+
+  @override
+  String get liveTranslationPairHelp => 'Detectează limba fiecărei fraze și traduce în cealaltă limbă selectată.';
 }

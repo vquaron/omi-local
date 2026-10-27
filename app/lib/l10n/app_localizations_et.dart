@@ -9943,4 +9943,74 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get localMacServers => 'Salvestatud serverid';
+
+  @override
+  String get liveTranslation => 'Reaalajas tõlge';
+
+  @override
+  String get liveTranslationTargetLanguage => 'Tõlgi keelde';
+
+  @override
+  String get liveTranslationHelp =>
+      'Ühendatud server kuvab tõlke algteksti all. Automaatselt kasutatakse kokkuvõttemudelit, kui sa ei vali serveri teegis teist mudelit: Settings → Translation.';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'Ühendatud serveris pole tõlkemudelit seadistatud. Ava selle teek: Settings → Summarization või Translation → Save → Use.';
+
+  @override
+  String get liveTranslationFailed =>
+      'Tõlge pole ühendatud serveris saadaval. Kontrolli selle teeki: Settings → Translation.';
+
+  @override
+  String get diarization => 'Kõnelejate eristamine';
+
+  @override
+  String get providerUnavailable => 'Server pole saadaval';
+
+  @override
+  String get providerMisconfigured => 'Kontrollige teenusepakkuja seadeid';
+
+  @override
+  String speakersCount(int count) {
+    return '$count kõnelejat';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'Kõnelejate eristamist ei tehtud';
+
+  @override
+  String get diarizationFailed => 'Kõnelejate eristamine ebaõnnestus';
+
+  @override
+  String get localProcessingHelp =>
+      'Kõnelejate reaalajas sildid tulevad Live-teenusepakkujalt. Allolev diariseerimine töötleb lõpetatud salvestisi.';
+
+  @override
+  String get localProcessingApplyHelp => 'Peata salvestamine enne vahetamist. Valitud serverid saavad sinu heli.';
+
+  @override
+  String get localProcessingKeyHelp => 'Tühi väli säilitab salvestatud võtme. Teine server vajab oma võtit.';
+
+  @override
+  String get localProcessingUnsupported => 'Nende seadete muutmiseks uuenda seotud serverit.';
+
+  @override
+  String get localProcessingFinished => 'Lõpetatud salvestised';
+
+  @override
+  String get localProcessingProbe => 'Kontrolli ühendust';
+
+  @override
+  String get localProcessingPending => 'Salvestatud muudatused pole aktiivsed. Rakendamiseks puuduta Kinnita.';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'Heli sünkroonimiseks uuenda serverit. Telefonis salvestatud heli säilitatakse.';
+
+  @override
+  String get liveTranslationBidirectional => 'Kahesuunaline tõlge';
+
+  @override
+  String get liveTranslationPairHelp => 'Tuvasta iga fraasi keel ja tõlgi teise valitud keelde.';
 }

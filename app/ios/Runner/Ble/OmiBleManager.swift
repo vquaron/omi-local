@@ -646,6 +646,10 @@ extension OmiBleManager: CBCentralManagerDelegate {
         NSLog("[OmiBle] centralManagerDidUpdateState: \(state), flutterApi=\(flutterApi != nil)")
         flutterApi?.onBluetoothStateChanged(state: state) { _ in }
 
+        if central.state == .poweredOn {
+            reconnectStalePeripherals()
+        }
+
         // Execute queued scan if Bluetooth just became ready
         if central.state == .poweredOn, let pending = pendingScan {
             NSLog("[OmiBle] Executing queued scan (timeout=\(pending.timeout))")

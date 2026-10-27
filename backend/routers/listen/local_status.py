@@ -86,6 +86,8 @@ async def snapshot(uid: str) -> dict:
     sinks = [session.capture_sink for session in sessions if session.capture_sink is not None]
     frames = sum(sink.frames_received for sink in sinks)
     pcm_bytes = sum(sink.decoded_pcm_bytes for sink in sinks)
+    frames += sum(getattr(session, 'outbox_preview_frames', 0) for session in sessions)
+    pcm_bytes += sum(getattr(session, 'outbox_preview_pcm_bytes', 0) for session in sessions)
     capture_state = 'waiting_audio' if sessions else 'idle'
     if frames:
         capture_state = 'received'
@@ -118,9 +120,12 @@ async def snapshot(uid: str) -> dict:
                        'labeled_segments': sum(item['labeled_segments'] for item in evidence)}
     elif live_state == 'unavailable':
         diarization = {'state': 'unavailable', 'labeled_segments': 0}
+    from utils.local_transcription_status import provider_stages
+    stages = provider_stages()
     return {
         'backend': 'ready',
         'diarization': diarization,
+        **({'stages': stages} if stages is not None else {}),
         'capture': {
             'state': capture_state,
             'audio_seconds': round(pcm_bytes / (OUTPUT_SAMPLE_RATE * OUTPUT_CHANNELS * OUTPUT_SAMPLE_WIDTH_BYTES), 3),
@@ -136,14 +141,29 @@ async def preview_snapshot(uid: str) -> dict:
     result = await snapshot(uid)
     result['sessions'] = []
     for session in registry._sessions_for(uid):
-        if not session.state.active or session.state.shutdown_event.is_set() or session.capture_sink is None:
+        if not session.state.active or session.state.shutdown_event.is_set():
             continue
         sink, preview = session.capture_sink, session.local_preview
+        if sink is not None:
+            capture = {
+                'source': sink.source, 'codec': sink.input_codec,
+                'audio_seconds': round(sink.decoded_pcm_bytes / 32000, 3),
+                'frames_received': sink.frames_received, 'decode_errors': sink.decode_errors,
+            }
+        elif getattr(session, 'outbox_preview_only', False) is True:
+            # This owner decision already validated the local PCM/Opus format.
+            # Durable WAV ownership lives on the phone; its preview still has
+            # the same RAM-only draft and decoded-audio counters.
+            capture = {
+                'source': session.request.source, 'codec': session.original_codec,
+                'audio_seconds': round(session.outbox_preview_pcm_bytes / 32000, 3),
+                'frames_received': session.outbox_preview_frames, 'decode_errors': 0,
+            }
+        else:
+            continue
         text = preview.segment.text if preview is not None else ''
         result['sessions'].append({
-            'source': sink.source, 'codec': sink.input_codec,
-            'audio_seconds': round(sink.decoded_pcm_bytes / 32000, 3),
-            'frames_received': sink.frames_received, 'decode_errors': sink.decode_errors,
+            **capture,
             # This ephemeral preview token already identifies the draft on iPhone;
             # it is not the persisted recording or owner's identifier.
             'preview_id': preview.segment.id if preview is not None else None,

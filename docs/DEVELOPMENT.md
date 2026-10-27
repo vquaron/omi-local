@@ -11,9 +11,13 @@ keys, certificates, or build artifacts.
 `app/` contains the app, `backend/` receives and stores audio,
 `scripts/dev-harness/` manages local services, and `web-local/` contains the library and logo.
 
-- `make test-library`: library and startup checks.
-- `make test-transport-unit`: isolated transport, live-adapter, and local-service
-  checks using the small dependency set used in CI.
+- `make test-library`: standalone harness, library backend and browser checks.
+- `make test-harness`: all active standalone harness suites listed in
+  `scripts/dev-harness/standalone-tests.txt`; uses an already prepared backend
+  environment and does not install dependencies. Retained upstream desktop,
+  memory and hook-automation tests are outside this inventory.
+- `make test-transport-unit`: the same harness inventory plus isolated transport,
+  live-adapter and container checks using the small dependency set used in CI.
 - `make test-offline`: local backend and services with full backend dependencies;
   includes importing the actual application and checking the offline route allowlist.
 - `make test-transport-app`: app tests and analyzer; uses Flutter 3.47.4, matching CI.
@@ -39,6 +43,11 @@ start and stop a CV1 recording, switch to the iPhone microphone while CV1 is
 connected, stop, and start Omi again. Check both recordings in the library.
 The Omi button switches the source back; Bluetooth reconnection and returning to
 the home screen do not change the source by themselves.
+
+`./omiloc doctor` checks prerequisites, selected model assets and running service
+readiness, and fails when services are stopped or unavailable. Its optional
+`--inference` runs synthetic final transcription without adding a library item.
+Neither command verifies physical CV1 delivery or long-session reliability.
 
 The installer uses Homebrew. Python 3.11.15 and dependencies are pinned in
 `backend/.python-version` and `backend/pylock.macos.toml`; Firebase CLI is pinned
@@ -100,8 +109,9 @@ The two modes install side by side and update independently:
 | `./iphone.command prod` | Omi Local — Profile, launched from its icon | Existing local bundle ID |
 | `./iphone.command dev` | Omi Local Dev — Debug, hot reload | Same ID with a `.dev` suffix |
 
-To install both, run the commands one at a time and end the first Flutter session
-before starting the second (`d` detaches Flutter while leaving the app running).
+To install both, run the commands one at a time. Profile exits after verified
+installation and launch. End an active Debug Flutter session before starting
+the other command (`d` detaches Flutter while leaving the app running).
 Here, `prod` means the daily local build; both apps use the offline profile.
 Data and Keychain entries for the previous bundle ID remain with Omi Local.
 Omi Local Dev has separate settings: pair the Mac and grant permissions on first
@@ -136,7 +146,18 @@ Run `make test-offline` and `make test-transport-app` before launching.
 Use the [standard iOS setup](LOCAL_SETUP.md) for initial preparation.
 
 `dev-iphone.command` uses a separate local Debug bundle and the existing signing
-team; it does not embed `.env` in the app. After readiness checks, it adds the
+team; it does not embed `.env` or `.env.servers` in the app. Optional
+[private server presets](LOCAL_SETUP.md#prefill-saved-servers) are validated
+before the Debug build and passed only to the final attested app launch, outside
+Dart defines and build inputs. Debug build/check subprocesses discard ambient launch
+credentials. Profile prepares dependencies with a clean environment, builds or
+reuses the exact `Profile-dev-iphoneos/Runner.app`, verifies its signature,
+provisioning, executable hash and input fingerprint, then installs that artifact.
+Only the final `devicectl` launch receives the runtime catalog. The native bridge consumes it once;
+saved entries and import markers persist in Keychain without replacing manual
+edits or deleted presets.
+
+After readiness checks, the Debug launcher adds the
 identifier and display-name settings only for `Debug-dev` to ignored
 `PersonalTeam.xcconfig`; the base bundle ID remains unchanged. `--check` writes
 nothing. The launcher checks tools and the phone, builds

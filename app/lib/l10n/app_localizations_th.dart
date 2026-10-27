@@ -9884,4 +9884,74 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get localMacServers => 'เซิร์ฟเวอร์ที่บันทึกไว้';
+
+  @override
+  String get liveTranslation => 'การแปลสด';
+
+  @override
+  String get liveTranslationTargetLanguage => 'แปลเป็น';
+
+  @override
+  String get liveTranslationHelp =>
+      'เซิร์ฟเวอร์ที่เชื่อมต่อจะแสดงคำแปลใต้ข้อความต้นฉบับ โดยใช้โมเดลสรุปโดยอัตโนมัติ เว้นแต่จะเลือกโมเดลอื่นในคลังของเซิร์ฟเวอร์: Settings → Translation';
+
+  @override
+  String get liveTranslationUnconfigured =>
+      'ยังไม่ได้ตั้งค่าโมเดลแปลบนเซิร์ฟเวอร์ที่เชื่อมต่อ เปิดคลังของเซิร์ฟเวอร์: Settings → Summarization หรือ Translation → Save → Use';
+
+  @override
+  String get liveTranslationFailed =>
+      'ไม่สามารถแปลบนเซิร์ฟเวอร์ที่เชื่อมต่อได้ ตรวจสอบคลังของเซิร์ฟเวอร์: Settings → Translation';
+
+  @override
+  String get diarization => 'การแยกผู้พูด';
+
+  @override
+  String get providerUnavailable => 'เซิร์ฟเวอร์ไม่พร้อมใช้งาน';
+
+  @override
+  String get providerMisconfigured => 'ตรวจสอบการตั้งค่าผู้ให้บริการ';
+
+  @override
+  String speakersCount(int count) {
+    return 'ผู้พูด $count คน';
+  }
+
+  @override
+  String get diarizationNotPerformed => 'ไม่ได้ทำการแยกผู้พูด';
+
+  @override
+  String get diarizationFailed => 'การแยกผู้พูดล้มเหลว';
+
+  @override
+  String get localProcessingHelp =>
+      'ป้ายผู้พูดแบบสดมาจากผู้ให้บริการ Live การแยกผู้พูดด้านล่างจะประมวลผลการบันทึกที่เสร็จแล้ว';
+
+  @override
+  String get localProcessingApplyHelp => 'หยุดบันทึกก่อนสลับ เซิร์ฟเวอร์ที่เลือกจะได้รับเสียงของคุณ';
+
+  @override
+  String get localProcessingKeyHelp => 'เว้นว่างเพื่อเก็บคีย์เดิม เซิร์ฟเวอร์อื่นต้องใช้คีย์ของตนเอง';
+
+  @override
+  String get localProcessingUnsupported => 'อัปเดตเซิร์ฟเวอร์ที่จับคู่เพื่อแก้ไขการตั้งค่าเหล่านี้';
+
+  @override
+  String get localProcessingFinished => 'การบันทึกที่เสร็จแล้ว';
+
+  @override
+  String get localProcessingProbe => 'ทดสอบการเชื่อมต่อ';
+
+  @override
+  String get localProcessingPending => 'การเปลี่ยนแปลงที่บันทึกไว้ยังไม่ทำงาน แตะยืนยันเพื่อนำไปใช้';
+
+  @override
+  String get localAudioServerUpdateRequired =>
+      'อัปเดตเซิร์ฟเวอร์เพื่อซิงค์เสียง เสียงที่บันทึกไว้ในโทรศัพท์จะยังคงอยู่';
+
+  @override
+  String get liveTranslationBidirectional => 'การแปลสองทาง';
+
+  @override
+  String get liveTranslationPairHelp => 'ตรวจจับภาษาของแต่ละวลีและแปลเป็นอีกภาษาที่เลือกไว้';
 }
