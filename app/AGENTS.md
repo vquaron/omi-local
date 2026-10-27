@@ -26,6 +26,10 @@ Adapter-off/reset events invalidate the transport even without a peripheral
 disconnect callback; queued device-ready cannot restore it while the radio is off.
 On iOS radio-on, retry known peripherals through the existing native reconnect
 policy; preserve manual disconnect and rebuild notification subscriptions.
+A paired live-preview socket belongs to its durable recording. After BLE loss
+starts a new recording, replace the previous preview even when the socket still
+reports connected and codec/language match. Fence outgoing audio by that owner
+and detach listeners from replaced sockets so late text cannot overwrite it.
 Device setup must recheck the owning connection after battery/listener awaits
 before starting capture; a raw disconnect invalidates it before the UI debounce.
 Stop fences pending phone startup and reconnect; native Start waits for native Stop.

@@ -85,6 +85,9 @@ its audio and resends the saved translation language pair on the next preview.
 Turning Bluetooth off clears the cached device link even if no separate device
 disconnect event arrives. Turning it back on retries previously connected devices
 that were not manually disconnected, then restores notification subscriptions.
+When reconnection starts a new recording, it also replaces the previous live
+preview, even if its WebSocket stayed connected. New audio is journaled while
+the replacement connects; old preview messages cannot overwrite the new text.
 The phone journal covers audio already received by the phone. Audio spoken while
 Bluetooth is absent requires recovery from the wearable's own storage; a connected
 status alone does not prove that this interval was recovered.

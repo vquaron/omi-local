@@ -1129,7 +1129,9 @@ class CaptureController extends ChangeNotifier
       return;
     }
     _localPreviewAudioOffsetSeconds = _localDurableRecording?.audioSeconds ?? 0;
+    if (!identical(_socket, socket)) _socket?.unsubscribe(this);
     _socket = socket;
+    _localPreviewRecording = localRecording;
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
     _liveTranslationStatus = null;
@@ -1618,7 +1620,8 @@ class CaptureController extends ChangeNotifier
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 
-    if (language != _socket?.language ||
+    if ((_localDurableRecording != null && !identical(_localPreviewRecording, _localDurableRecording)) ||
+        language != _socket?.language ||
         codec != _socket?.codec ||
         _socket?.state != SocketServiceState.connected ||
         _socket?.sttConfigId != sttConfigId ||
@@ -2402,6 +2405,8 @@ class CaptureController extends ChangeNotifier
   bool _temporaryRecordingRequested = false;
   LocalDeviceAudioStart? _localDeviceAudioStart;
   LocalAudioRecording? _localDurableRecording;
+  // A live preview belongs to one durable recording, even if its socket survives BLE loss.
+  LocalAudioRecording? _localPreviewRecording;
   bool _localDurabilityFailed = false;
 
   Future<void> _beginLocalDurableAudio(String source, BleAudioCodec codec) async {
@@ -2427,7 +2432,9 @@ class CaptureController extends ChangeNotifier
             payload,
             afterPersisted: () {
               // Preview is best-effort; persisted immutable delivery is independent.
-              if (identical(_localDurableRecording, recording) && _socket?.state == SocketServiceState.connected) {
+              if (identical(_localDurableRecording, recording) &&
+                  identical(_localPreviewRecording, recording) &&
+                  _socket?.state == SocketServiceState.connected) {
                 final socket = _socket!;
                 try {
                   unawaited(

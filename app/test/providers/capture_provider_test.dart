@@ -225,10 +225,17 @@ class _BufferedStartProvider extends CaptureProvider {
     return gate.future;
   }
 
-  _AudioPacketSocket connect(int index, {BleAudioCodec codec = BleAudioCodec.opusFS320}) {
+  _AudioPacketSocket connect(
+    int index, {
+    BleAudioCodec codec = BleAudioCodec.opusFS320,
+    String language = 'en',
+    String? sttConfigId,
+  }) {
     final socket = _AudioPacketSocket();
     sockets.add(socket);
-    gates[index].complete(TranscriptSegmentSocketService.withSocket(16000, codec, 'en', socket));
+    gates[index].complete(
+      TranscriptSegmentSocketService.withSocket(16000, codec, language, socket, sttConfigId: sttConfigId),
+    );
     return socket;
   }
 }
@@ -1070,6 +1077,82 @@ void main() {
       expect(outbox.activeRecordings, 0);
       provider.dispose();
       await audio.close();
+    });
+
+    test('BLE resume replaces the previous recording preview even when its socket stays connected', () async {
+      final audio = StreamController<List<int>>.broadcast(sync: true);
+      final provider = _BufferedStartProvider(
+        localMacSession: session,
+        audioListenerLoader: (_, callback) async => audio.stream.listen(callback),
+        audioCodecLoader: (_) async => BleAudioCodec.opusFS320,
+      );
+      final device = _device(id: 'synthetic-reconnect', type: DeviceType.omi);
+      final prefs = SharedPreferencesUtil();
+      final language = prefs.hasSetPrimaryLanguage ? prefs.userPrimaryLanguage : 'multi';
+      void text(TranscriptSegmentSocketService service, String preview, String word) {
+        service.onMessage(
+          jsonEncode({
+            'type': 'local_transcript_snapshot',
+            'preview_id': 'local-preview-$preview',
+            'revision': 1,
+            'segments': [_segment(preview, word).toJson()],
+          }),
+        );
+      }
+
+      try {
+        final start = provider.streamDeviceRecording(device: device, userInitiated: true);
+        await pumpEventQueue();
+        final first = provider.connect(0, language: language, sttConfigId: prefs.customSttConfig.sttConfigId);
+        await start;
+        final oldService = (await provider.gates[0].future)!;
+        audio.add([0, 0, 0, 0x78, 1]);
+        await outbox.flushPendingWrites();
+        text(oldService, 'before-ble-loss', 'Before');
+        expect(provider.segments.map((segment) => segment.text), ['Before']);
+
+        provider.updateRecordingDevice(null);
+        final resume = provider.streamDeviceRecording(
+          device: device,
+          userInitiated: provider.shouldAutomaticallyStartDeviceRecording,
+        );
+        await pumpEventQueue();
+        audio.add([0, 0, 0, 0x78, 2]);
+        await outbox.flushPendingWrites();
+        expect(provider.gates, hasLength(2), reason: 'Matching codec/language cannot reuse a retired preview');
+        expect(first.packets, [
+          [0x78, 1],
+        ], reason: 'New journal audio cannot enter the previous preview');
+        final next = provider.connect(1, language: language, sttConfigId: prefs.customSttConfig.sttConfigId);
+        await resume;
+        audio.add([1, 0, 0, 0x78, 3]);
+        await outbox.flushPendingWrites();
+        expect(next.packets, [
+          [0x78, 3],
+        ]);
+        text((await provider.gates[1].future)!, 'after-ble-loss', 'After');
+        expect(provider.segments.map((segment) => segment.text), ['After']);
+        text(oldService, 'late-old-preview', 'Stale');
+        expect(provider.segments.map((segment) => segment.text), ['After']);
+        await provider.stopStreamDeviceRecording();
+        await outbox.drain();
+        expect(
+          directory.listSync().whereType<File>().expand(packets),
+          unorderedEquals([
+            [0x78, 1],
+            [0x78, 2],
+            [0x78, 3],
+          ]),
+        );
+      } finally {
+        for (final gate in provider.gates) {
+          if (!gate.isCompleted) gate.complete(null);
+        }
+        await pumpEventQueue();
+        await provider.stopStreamDeviceRecording();
+        provider.dispose();
+        await audio.close();
+      }
     });
 
     test('phone started during network loss uses outbox rather than unsupported native batch', () async {
