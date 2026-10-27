@@ -50,9 +50,13 @@ same part identity and SHA-256 after saving its WAV and metadata.
 
 The live recording screen provides **Stop** even before any transcript appears
 and while input is interrupted. It closes the selected input and seals its phone
-journal without waiting for the server. Its timer shows flushed audio sample
-time, including offline audio; server reachability and speech recognition do not
-drive that timer. A local **Process Now** action seals the current part for
+journal without waiting for the server. Its timer shows total elapsed session
+time, including silence, mute and input interruptions. The capture label still
+indicates whether audio is arriving or the input is paused. The timer keeps
+running through preview reconnects and part checkpoints, and resets for a new
+recording. Saved audio duration and transcript playback timestamps continue to
+use captured samples; they do not include gaps in incoming audio. A local
+**Process Now** action seals the current part for
 delivery while capture can continue; it does not invoke the cloud conversation
 workflow or clear an active live draft.
 

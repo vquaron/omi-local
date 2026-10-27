@@ -282,6 +282,7 @@ class CaptureController extends ChangeNotifier
     Future<bool> Function()? microphonePermissionRequester,
     IMicRecorderService? phoneMicRecorder,
     LocalMacSession? localMacSession,
+    Stopwatch? localSessionClock,
     RecordingLifecycleTelemetry? recordingTelemetry,
   }) : externalActions = externalActions ?? const NoopCaptureExternalActions(),
        _conversationLocationCapture =
@@ -294,6 +295,7 @@ class CaptureController extends ChangeNotifier
        _microphonePermissionRequester = microphonePermissionRequester,
        _phoneMicRecorder = phoneMicRecorder,
        _localMacSession = localMacSession ?? LocalMacSession.instance,
+       _localSessionClock = localSessionClock ?? Stopwatch(),
        _recordingTelemetry = recordingTelemetry ?? RecordingLifecycleTelemetry() {
     // Restore a persisted device mute so it survives an app kill/restart. When
     // the device reconnects, streamDeviceRecording() reads _isPaused as
@@ -480,10 +482,15 @@ class CaptureController extends ChangeNotifier
       _localDurableRecording?.recordingId ?? (_sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds');
 
   /// Sample time accepted into the phone journal, independent of server text
-  /// and wall-clock/network changes. The UI polls this only while visible.
+  /// and wall-clock/network changes. This remains the audio playback time.
   Duration? get localRecordingDuration => _localDurableRecording == null
       ? null
       : Duration(microseconds: (_localDurableRecording!.audioSeconds * 1000000).round());
+
+  /// Time since this recording began, including silence, mute and interruptions.
+  /// A monotonic clock keeps the visible timer independent of arriving audio,
+  /// server text, screen rebuilds and changes to the phone's date/time.
+  Duration? get localSessionElapsed => _localDurableRecording == null ? null : _localSessionClock.elapsed;
 
   Future<void> stopLocalCapture() async {
     if (!TemporaryCaptureControls.enabled) throw StateError('Local capture controls unavailable');
@@ -2405,6 +2412,7 @@ class CaptureController extends ChangeNotifier
   bool _temporaryRecordingRequested = false;
   LocalDeviceAudioStart? _localDeviceAudioStart;
   LocalAudioRecording? _localDurableRecording;
+  final Stopwatch _localSessionClock;
   // A live preview belongs to one durable recording, even if its socket survives BLE loss.
   LocalAudioRecording? _localPreviewRecording;
   bool _localDurabilityFailed = false;
@@ -2420,6 +2428,9 @@ class CaptureController extends ChangeNotifier
       address: _localMacSession.address,
       key: _localMacSession.accessKey!,
     );
+    _localSessionClock
+      ..reset()
+      ..start();
   }
 
   void _persistLocalAudio(List<int> payload, {LocalAudioRecording? owner}) {
@@ -2492,6 +2503,9 @@ class CaptureController extends ChangeNotifier
   Future<void> _finishLocalDurableAudio() async {
     final recording = _localDurableRecording;
     _localDurableRecording = null;
+    _localSessionClock
+      ..stop()
+      ..reset();
     try {
       await recording?.stop();
     } catch (_) {

@@ -38,6 +38,9 @@ class _Capture extends CaptureProvider {
   Duration? journalDuration;
   @override
   Duration? get localRecordingDuration => journalDuration;
+  Duration? sessionElapsed;
+  @override
+  Duration? get localSessionElapsed => sessionElapsed;
   Completer<void>? startGate;
   OmiButtonEvent? buttonEvent;
   LocalOmiButtonAction? buttonAction;
@@ -104,6 +107,7 @@ class _Capture extends CaptureProvider {
   Future<void> stopStreamRecording({String reason = 'user_stopped'}) async {
     calls.add('phone:stop');
     journalDuration = null;
+    sessionElapsed = null;
     updateRecordingState(RecordingState.stop);
   }
 }
@@ -137,12 +141,13 @@ void main() {
   });
   tearDown(() => Env.setRuntimeModeForTesting(null));
 
-  testWidgets('local live page exposes journal timer and Stop before any transcript while interrupted', (tester) async {
+  testWidgets('local live page advances elapsed timer during an audio gap and keeps paused status and Stop', (tester) async {
     final capture = _Capture();
     final device = _IdleDevice();
     addTearDown(capture.dispose);
     addTearDown(device.dispose);
     capture.journalDuration = const Duration(seconds: 42);
+    capture.sessionElapsed = const Duration(seconds: 42);
     capture.updateRecordingState(RecordingState.interrupted);
     await tester.pumpWidget(
       MultiProvider(
@@ -160,9 +165,12 @@ void main() {
     );
     await tester.pump();
     expect(find.text('00:00:42'), findsOneWidget);
-    capture.journalDuration = const Duration(seconds: 43);
+    capture.sessionElapsed = const Duration(seconds: 43);
     await tester.pump(const Duration(seconds: 1));
-    expect(find.text('00:00:43'), findsOneWidget, reason: 'Sample time updates without an ASR event or server poll');
+    expect(find.text('00:00:43'), findsOneWidget, reason: 'Elapsed time advances without new audio or an ASR event');
+    expect(capture.localRecordingDuration, const Duration(seconds: 42));
+    final l10n = AppLocalizations.of(tester.element(find.byKey(const Key('local_capture_page_state'))));
+    expect(tester.widget<Text>(find.byKey(const Key('local_capture_page_state'))).data, l10n.paused);
     await tester.tap(find.byKey(const Key('temporary_stop_recording')));
     await tester.pump();
     expect(capture.calls, ['phone:stop']);

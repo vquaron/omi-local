@@ -11,5 +11,6 @@ class CaptureProvider extends CaptureController {
     super.microphonePermissionRequester,
     super.phoneMicRecorder,
     super.localMacSession,
+    super.localSessionClock,
   });
 }
