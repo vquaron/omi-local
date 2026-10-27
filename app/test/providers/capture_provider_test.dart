@@ -1079,6 +1079,141 @@ void main() {
       await audio.close();
     });
 
+    test('failed local STT on an open socket retries automatically without restarting BLE or its journal', () async {
+      final audio = StreamController<List<int>>.broadcast(sync: true);
+      var subscriptions = 0;
+      final provider = _BufferedStartProvider(
+        localMacSession: session,
+        audioListenerLoader: (_, callback) async {
+          subscriptions++;
+          return audio.stream.listen(callback);
+        },
+        audioCodecLoader: (_) async => BleAudioCodec.opusFS320,
+      );
+      try {
+        final start = provider.streamDeviceRecording(
+          device: _device(id: 'synthetic-stt-recovery', type: DeviceType.omi),
+          userInitiated: true,
+        );
+        await pumpEventQueue();
+        final first = provider.connect(0);
+        await start;
+        final service = (await provider.gates[0].future)!;
+        audio.add([0, 0, 0, 0x78, 1]);
+        await outbox.flushPendingWrites();
+        final recordingId = provider.activeCaptureSessionId;
+        fakeAsync((time) {
+          service.onMessage(
+            jsonEncode({
+              'type': 'service_status',
+              'provider': 'local_live_preview',
+              'status': 'stt_failed',
+              'reason': 'protocol_error',
+              'retryable': false,
+            }),
+          );
+          time.flushMicrotasks();
+          expect(first.stopped, isTrue, reason: 'A terminal ASR failure must retire its still-connected preview');
+          expect(provider.transcriptServiceReady, isFalse);
+          expect(provider.keepAliveScheduledForTesting, isTrue);
+          time.elapse(const Duration(seconds: 14));
+          time.flushMicrotasks();
+          expect(provider.gates, hasLength(1), reason: 'Back off instead of retrying a busy provider in a tight loop');
+          time.elapse(const Duration(seconds: 1));
+          time.flushMicrotasks();
+          expect(provider.gates, hasLength(2), reason: 'No user Stop/Start or route event is needed');
+          provider.connect(1);
+          time.flushMicrotasks();
+          provider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready', provider: 'local_live_preview'));
+          provider.onMessageEventReceived(
+            LocalTranscriptSnapshotEvent(
+              previewId: 'local-preview-recovered',
+              revision: 1,
+              segments: [_segment('recovered', 'Recovered automatically')],
+            ),
+          );
+          expect(provider.terminalTranscriptionFailure, isNull);
+        });
+        audio.add([1, 0, 0, 0x78, 2]);
+        await outbox.flushPendingWrites();
+        expect(subscriptions, 1);
+        expect(provider.activeCaptureSessionId, recordingId);
+        expect(provider.segments.single.text, 'Recovered automatically');
+        expect(provider.sockets[1].packets, [
+          [0x78, 2],
+        ]);
+        await provider.stopStreamDeviceRecording();
+        await outbox.drain();
+        expect(packets(directory.listSync().whereType<File>().single), [
+          [0x78, 1],
+          [0x78, 2],
+        ]);
+      } finally {
+        for (final gate in provider.gates) {
+          if (!gate.isCompleted) gate.complete(null);
+        }
+        await pumpEventQueue();
+        await provider.stopStreamDeviceRecording();
+        provider.dispose();
+        await audio.close();
+      }
+    });
+
+    for (final reason in ['unavailable', 'invalid_configuration']) {
+      test('local STT $reason received before subscription preserves recovery policy', () async {
+        final audio = StreamController<List<int>>.broadcast(sync: true);
+        final provider = _BufferedStartProvider(
+          localMacSession: session,
+          audioListenerLoader: (_, callback) async => audio.stream.listen(callback),
+          audioCodecLoader: (_) async => BleAudioCodec.opusFS320,
+        );
+        try {
+          final start = provider.streamDeviceRecording(
+            device: _device(id: 'synthetic-early-failure', type: DeviceType.omi),
+            userInitiated: true,
+          );
+          await pumpEventQueue();
+          final socket = _AudioPacketSocket();
+          final service = TranscriptSegmentSocketService.withSocket(16000, BleAudioCodec.opusFS320, 'multi', socket);
+          service.onMessage(
+            jsonEncode({
+              'type': 'service_status',
+              'provider': 'local_live_preview',
+              'status': 'stt_failed',
+              'reason': reason,
+              'retryable': false,
+            }),
+          );
+          provider.gates.single.complete(service);
+          await start;
+          await pumpEventQueue();
+          final recoverable = reason == 'unavailable';
+          expect(socket.stopped, recoverable);
+          expect(provider.keepAliveScheduledForTesting, recoverable);
+          if (recoverable) expect(provider.transcriptServiceReady, isFalse);
+          expect(provider.terminalTranscriptionFailure?.reason, reason);
+          expect(provider.recordingState, RecordingState.deviceRecord);
+          audio.add([0, 0, 0, 0x78, 1]);
+          await outbox.flushPendingWrites();
+          expect(outbox.activeRecordings, 1);
+          await provider.stopStreamDeviceRecording();
+          await outbox.drain();
+          expect(packets(directory.listSync().whereType<File>().single), [
+            [0x78, 1],
+          ]);
+          expect(provider.keepAliveScheduledForTesting, isFalse);
+        } finally {
+          for (final gate in provider.gates) {
+            if (!gate.isCompleted) gate.complete(null);
+          }
+          await pumpEventQueue();
+          await provider.stopStreamDeviceRecording();
+          provider.dispose();
+          await audio.close();
+        }
+      });
+    }
+
     test('BLE resume replaces the previous recording preview even when its socket stays connected', () async {
       final audio = StreamController<List<int>>.broadcast(sync: true);
       final provider = _BufferedStartProvider(

@@ -82,6 +82,11 @@ Network socket loss changes transcription readiness, not microphone capture;
 reconnecting does not stop or restart the recording input.
 This also applies to a failed live-translation control message. The phone retains
 its audio and resends the saved translation language pair on the next preview.
+A transient live-ASR failure also retires its preview even when the WebSocket
+is still open. The app retries through its 15-second reconnect loop while
+continuing to journal audio. Disabled or invalid provider settings do not trigger
+that retry. Live text resumes from new audio; retained audio remains available
+for final processing independently of live preview.
 Turning Bluetooth off clears the cached device link even if no separate device
 disconnect event arrives. Turning it back on retries previously connected devices
 that were not manually disconnected, then restores notification subscriptions.

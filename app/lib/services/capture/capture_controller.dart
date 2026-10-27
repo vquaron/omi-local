@@ -1132,9 +1132,10 @@ class CaptureController extends ChangeNotifier
     if (!identical(_socket, socket)) _socket?.unsubscribe(this);
     _socket = socket;
     _localPreviewRecording = localRecording;
-    _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
     _liveTranslationStatus = null;
+    // subscribe replays status received during connect, including a failed preview.
+    _socket?.subscribe(this, this);
     _sendLiveTranslationControl(onlyWhenEnabled: true);
     if (recordingState == RecordingState.interrupted && !_micInterrupted && _phoneStop == null) {
       updateRecordingState(RecordingState.record);
@@ -2469,7 +2470,11 @@ class CaptureController extends ChangeNotifier
     );
   }
 
-  Future<void> _closeFailedLocalPreview(LocalAudioRecording recording, TranscriptSegmentSocketService socket) async {
+  Future<void> _closeFailedLocalPreview(
+    LocalAudioRecording recording,
+    TranscriptSegmentSocketService socket, {
+    String reason = 'local preview send failed',
+  }) async {
     if (!identical(recording, _localDurableRecording) ||
         !identical(socket, _socket) ||
         socket.state != SocketServiceState.connected) {
@@ -2477,9 +2482,9 @@ class CaptureController extends ChangeNotifier
     }
     _transcriptServiceReady = false;
     try {
-      // send() returns a Future: a synchronous try/catch alone cannot contain
-      // its error. Retire this transport, keeping canonical journal/input alive.
-      await socket.stop(reason: 'local preview send failed');
+      // Both async send failures and terminal ASR status retire only the
+      // preview transport, keeping the canonical journal and input alive.
+      await socket.stop(reason: reason);
     } catch (_) {
       // Closing a broken preview is best-effort too; retain its phone audio.
     }
@@ -2758,7 +2763,8 @@ class CaptureController extends ChangeNotifier
         return;
       }
 
-      if (!AuthService.instance.isSignedIn()) {
+      final signedIn = Env.usesLocalTunnel ? _localMacSession.isSignedIn : AuthService.instance.isSignedIn();
+      if (!signedIn) {
         Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
         t.cancel();
         _keepAliveTimer = null;
@@ -3090,11 +3096,23 @@ class CaptureController extends ChangeNotifier
         return;
       }
 
-      // The backend sends stt_failed immediately before it closes the socket.
-      // Keep this terminal state separate from the connection-scoped status
-      // list so the user can see the outage while the reconnect loop runs.
+      // Keep terminal ASR failure separate from connection-scoped status so
+      // the outage stays visible while the reconnect loop runs.
       if (event.status == 'stt_failed') {
         _terminalTranscriptionFailure = event;
+        final recording = _localDurableRecording;
+        final socket = _socket;
+        // Local capture keeps /listen open after its ASR worker dies. That
+        // preview is terminal (retryable=false), but a new connection can heal
+        // transient worker failures. Reuse the 15-second reconnect backoff;
+        // disabled/misconfigured providers still require a settings change.
+        if (event.provider == 'local_live_preview' &&
+            const {'busy', 'recovering', 'unavailable', 'protocol_error', 'buffer_full'}.contains(event.reason) &&
+            recording != null &&
+            identical(_localPreviewRecording, recording) &&
+            socket != null) {
+          unawaited(_closeFailedLocalPreview(recording, socket, reason: 'local preview STT failed'));
+        }
       } else if (event.status == 'ready' &&
           !(event.provider == 'offline_capture' && _terminalTranscriptionFailure?.provider == 'local_live_preview')) {
         _terminalTranscriptionFailure = null;

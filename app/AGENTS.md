@@ -49,6 +49,10 @@ Contain the Future returned by preview send; an async socket-write error retires
 only that socket and schedules recovery, never a storage error or input restart.
 Translation control sends share that protection; resend the saved language pair
 when a replacement preview connects without restarting its recording journal.
+Local `stt_failed` can leave the listen socket open. Retire previews reporting
+transient worker failures and reuse the 15-second reconnect backoff without
+restarting capture; disabled/invalid configuration requires settings changes.
+Status replayed during subscription must not be overwritten by socket readiness.
 Local live screens always expose Stop, including before text and during input
 interruption. Route it through stopLocalCapture so the owning journal is sealed.
 Show elapsed time from flushed journal samples, independent of Conversation/ASR.
