@@ -195,6 +195,7 @@ class _BufferedStartProvider extends CaptureProvider {
     super.microphonePermissionRequester,
     super.phoneMicRecorder,
     super.localMacSession,
+    super.localSessionClock,
   }) : super(inProgressConversationLoader: () async {});
 
   final gates = <Completer<TranscriptSegmentSocketService?>>[];
@@ -354,6 +355,23 @@ class _FakeLiveMicRecorder extends _FakeBatchMicRecorder {
   void stop() {
     stops++;
     stopped?.call();
+  }
+}
+
+class _ManualSessionClock extends Stopwatch {
+  Duration value = Duration.zero;
+
+  void advance(Duration duration) {
+    if (isRunning) value += duration;
+  }
+
+  @override
+  Duration get elapsed => value;
+
+  @override
+  void reset() {
+    super.reset();
+    value = Duration.zero;
   }
 }
 
@@ -1466,6 +1484,105 @@ void main() {
       expect(packets(directory.listSync().whereType<File>().single), [List.filled(320, 5)]);
       provider.dispose();
       legacy.dispose();
+    });
+
+    test('Omi mute and resume preserve session elapsed while received audio stays separate', () async {
+      final clock = _ManualSessionClock();
+      final audio = StreamController<List<int>>.broadcast(sync: true);
+      final provider = _BufferedStartProvider(
+        localMacSession: session,
+        localSessionClock: clock,
+        audioListenerLoader: (_, callback) async => audio.stream.listen(callback),
+        audioCodecLoader: (_) async => BleAudioCodec.opusFS320,
+      );
+      final start = provider.streamDeviceRecording(
+        device: _device(id: 'synthetic-session-clock', type: DeviceType.omi),
+        userInitiated: true,
+      );
+      await pumpEventQueue();
+      provider.connect(0);
+      await start;
+      audio.add([1, 0, 0, 0x78, 4]);
+      await outbox.flushPendingWrites();
+      final recording = provider.activeCaptureSessionId;
+      final samples = provider.localRecordingDuration;
+      clock.advance(const Duration(seconds: 10));
+      await provider.pauseDeviceRecording();
+      clock.advance(const Duration(seconds: 20));
+      expect(provider.localCapturePhase, LocalCapturePhase.paused);
+      expect(provider.localSessionElapsed, const Duration(seconds: 30));
+      expect(provider.localRecordingDuration, samples);
+      await provider.resumeDeviceRecording();
+      clock.advance(const Duration(seconds: 5));
+      expect(provider.activeCaptureSessionId, recording);
+      expect(provider.localSessionElapsed, const Duration(seconds: 35));
+      await provider.stopLocalCapture();
+      expect(provider.localSessionElapsed, isNull);
+      expect(clock.isRunning, isFalse);
+      await outbox.drain();
+      provider.dispose();
+      await audio.close();
+    });
+
+    test('session clock includes audio gaps and survives interruption, preview recovery and checkpoint', () async {
+      final clock = _ManualSessionClock();
+      final mic = _FakeLiveMicRecorder();
+      final provider = _BufferedStartProvider(
+        localMacSession: session,
+        localSessionClock: clock,
+        audioListenerLoader: (_, __) async => null,
+        microphonePermissionRequester: () async => true,
+        phoneMicRecorder: mic,
+      );
+      expect(provider.localSessionElapsed, isNull);
+      await provider.streamRecording();
+      await pumpEventQueue();
+      final socket = provider.connect(0, codec: BleAudioCodec.pcm16);
+      await pumpEventQueue();
+      final recording = provider.activeCaptureSessionId;
+      expect(clock.isRunning, isTrue);
+      expect(provider.localSessionElapsed, Duration.zero);
+
+      mic.receive!(Uint8List.fromList(List.filled(320, 5)));
+      await outbox.flushPendingWrites();
+      clock.advance(const Duration(seconds: 20));
+      expect(provider.localSessionElapsed, const Duration(seconds: 20));
+      expect(provider.localRecordingDuration, const Duration(milliseconds: 10));
+
+      provider.updateRecordingState(RecordingState.interrupted);
+      clock.advance(const Duration(seconds: 30));
+      expect(provider.localCapturePhase, LocalCapturePhase.paused);
+      expect(provider.localSessionElapsed, const Duration(seconds: 50));
+      expect(provider.localRecordingDuration, const Duration(milliseconds: 10));
+
+      provider.updateRecordingState(RecordingState.record);
+      socket.failAudioSend = true;
+      mic.receive!(Uint8List.fromList(List.filled(320, 6)));
+      await outbox.flushPendingWrites();
+      await pumpEventQueue();
+      provider.onConnectionStateChanged(true);
+      await pumpEventQueue();
+      provider.connect(1, codec: BleAudioCodec.pcm16);
+      await pumpEventQueue();
+      await provider.forceProcessingCurrentConversation();
+      clock.advance(const Duration(seconds: 10));
+      expect(provider.activeCaptureSessionId, recording);
+      expect(provider.localSessionElapsed, const Duration(minutes: 1));
+      expect(provider.localRecordingDuration, const Duration(milliseconds: 20));
+      expect(mic.starts, 1);
+
+      await provider.stopLocalCapture();
+      expect(provider.localSessionElapsed, isNull);
+      expect(clock.isRunning, isFalse);
+      await provider.streamRecording();
+      await pumpEventQueue();
+      expect(provider.localSessionElapsed, Duration.zero);
+      expect(clock.isRunning, isTrue);
+      provider.gates.last.complete(null);
+      await pumpEventQueue();
+      await provider.stopLocalCapture();
+      await outbox.drain();
+      provider.dispose();
     });
 
     test('delayed native running event starts preview and interrupted Stop seals the phone owner', () async {

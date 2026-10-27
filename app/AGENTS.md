@@ -55,7 +55,9 @@ restarting capture; disabled/invalid configuration requires settings changes.
 Status replayed during subscription must not be overwritten by socket readiness.
 Local live screens always expose Stop, including before text and during input
 interruption. Route it through stopLocalCapture so the owning journal is sealed.
-Show elapsed time from flushed journal samples, independent of Conversation/ASR.
+Show monotonic session elapsed time through silence, mute and interruptions;
+reset only for a new recording. Keep capture status and journal sample duration
+separate: a running timer is not evidence of incoming or saved audio.
 Paired Process Now checkpoints parts; never clear its active draft or invoke the
 cloud in-progress Conversation API. Native running may follow the start reply;
 start preview on that callback too, without reopening an already connected socket.

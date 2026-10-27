@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:omi/providers/capture_provider.dart';
 
-/// Reads flushed sample time from the capture owner, never a server Conversation
-/// or ASR result. Its timer only refreshes the visible label, not capture state.
+/// Shows elapsed session time, including gaps without audio. The capture status
+/// remains separate; this ticker refreshes only the visible label.
 class LocalRecordingTimer extends StatefulWidget {
   const LocalRecordingTimer({super.key, required this.provider});
   final CaptureProvider provider;
@@ -20,7 +20,7 @@ class _LocalRecordingTimerState extends State<LocalRecordingTimer> {
   void initState() {
     super.initState();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && widget.provider.localRecordingDuration != null) setState(() {});
+      if (mounted && widget.provider.localSessionElapsed != null) setState(() {});
     });
   }
 
@@ -32,7 +32,7 @@ class _LocalRecordingTimerState extends State<LocalRecordingTimer> {
 
   @override
   Widget build(BuildContext context) {
-    final duration = widget.provider.localRecordingDuration;
+    final duration = widget.provider.localSessionElapsed;
     if (duration == null) return const SizedBox.shrink();
     final seconds = duration.inSeconds;
     String pad(int value) => value.toString().padLeft(2, '0');
